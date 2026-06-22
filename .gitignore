@@ -1,0 +1,8 @@
+node_modules/
+.pnpm-store/
+.wrangler/
+dist/
+work/
+outputs/
+*.log
+.dev.vars

@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qest-wave-demo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-20",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "QEST_KV",
+      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "30 20 * * *",
+      "0 22 * * *",
+      "0 0 * * *",
+      "0 2 * * *",
+      "0 4 * * *",
+      "0 6 * * *",
+      "0 8 * * *"
+    ]
+  }
+}
