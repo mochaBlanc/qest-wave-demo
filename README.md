@@ -73,7 +73,7 @@ npm run deploy
 
 ## 定期更新
 
-`wrangler.jsonc` の Cron Trigger は UTC です。設定値は日本時間の 05:30、07:00、09:00、11:00、13:00、15:00、17:00 に相当します。Open-Meteo または Dify が失敗した場合、Worker はエラーを記録し、既存の KV データを上書きしません。
+`wrangler.jsonc` の Cron Trigger は UTC です。設定値は日本時間の 05:30、07:00、09:00、12:00、15:00 に相当します。Open-Meteo または Dify が失敗した場合、Worker はエラーを記録し、既存の KV データを上書きしません。
 
 ## 注意
 

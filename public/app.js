@@ -36,7 +36,7 @@ async function loadBoard() {
 
 function renderBoard(board) {
   elements.safety.textContent = `安全目安：${text(board.safety_level)}`;
-  elements.updated.textContent = `更新：${text(board.updated_at)}`;
+  elements.updated.textContent = `更新（日本時間）：${text(board.updated_at)}`;
   elements.summary.textContent = text(board.today_summary);
   elements.beginnerStars.innerHTML = stars(board.overall_beginner_index);
   elements.longboardStars.innerHTML = stars(board.overall_longboard_index);

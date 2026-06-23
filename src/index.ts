@@ -47,6 +47,7 @@ interface ConditionData {
   longitude: number;
   date: string;
   generated_at: string;
+  updated_at: string;
   slots: SlotData[];
 }
 
@@ -167,20 +168,22 @@ async function fetchConditions(): Promise<ConditionData> {
     throw new Error("Open-Meteo returned no hourly data");
   }
 
-  const date = String(marine.hourly.time[0] ?? weather.hourly.time[0] ?? "").slice(0, 10);
-  if (!date) throw new Error("Open-Meteo returned no forecast date");
+  const forecastDate = String(marine.hourly.time[0] ?? weather.hourly.time[0] ?? "").slice(0, 10);
+  if (!forecastDate) throw new Error("Open-Meteo returned no forecast date");
 
   const slots = SLOT_DEFINITIONS.map((definition) =>
-    aggregateSlot(definition, date, marine.hourly as HourlyData, weather.hourly as HourlyData),
+    aggregateSlot(definition, forecastDate, marine.hourly as HourlyData, weather.hourly as HourlyData),
   );
+  const updatedAt = formatJapanDateTime();
 
   return {
     mode: "today_board",
     location: "鵠沼海岸",
     latitude: 35.317,
     longitude: 139.472,
-    date,
-    generated_at: new Date().toISOString(),
+    date: `${forecastDate} 00:00`,
+    generated_at: updatedAt,
+    updated_at: updatedAt,
     slots,
   };
 }
@@ -268,7 +271,7 @@ function normalizeBoard(result: Record<string, unknown>, condition: ConditionDat
   const beginnerBest = bestSlot(condition.slots, "rule_beginner_score");
   const longboardBest = bestSlot(condition.slots, "rule_longboard_score");
   return {
-    updated_at: asString(result.updated_at, formatJapanTime(condition.generated_at)),
+    updated_at: condition.updated_at,
     today_summary: asString(result.today_summary, "最新の海況予報を時間帯別に整理しました。"),
     overall_beginner_index: asScore(result.overall_beginner_index, beginnerBest.rule_beginner_score),
     overall_longboard_index: asScore(result.overall_longboard_index, longboardBest.rule_longboard_score),
@@ -437,15 +440,26 @@ function demoSlot(
   };
 }
 
-function formatJapanTime(iso: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
+function formatJapanDateTime(value: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(iso));
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  const year = byType.get("year");
+  const month = byType.get("month");
+  const day = byType.get("day");
+  const hour = byType.get("hour");
+  const minute = byType.get("minute");
+  if (!year || !month || !day || !hour || !minute) {
+    throw new Error("Failed to format Asia/Tokyo local time");
+  }
+  return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
