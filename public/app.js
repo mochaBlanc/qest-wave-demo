@@ -1,17 +1,20 @@
 const elements = {
   status: document.querySelector("#status"),
   content: document.querySelector("#content"),
+  details: document.querySelector("#details"),
   refresh: document.querySelector("#refresh-button"),
   brand: document.querySelector("#brand-label"),
   title: document.querySelector("#board-title"),
-  safety: document.querySelector("#safety-level"),
   updated: document.querySelector("#updated-at"),
   summary: document.querySelector("#today-summary"),
   beginnerStars: document.querySelector("#beginner-stars"),
   longboardStars: document.querySelector("#longboard-stars"),
+  beginnerMessage: document.querySelector("#beginner-message"),
+  advancedMessage: document.querySelector("#advanced-message"),
   beginnerBest: document.querySelector("#beginner-best"),
   advancedBest: document.querySelector("#advanced-best"),
   slots: document.querySelector("#slot-grid"),
+  localNote: document.querySelector("#local-note"),
   notice: document.querySelector("#notice"),
 };
 
@@ -27,6 +30,7 @@ async function loadBoard() {
     renderBoard(await response.json());
     elements.status.hidden = true;
     elements.content.hidden = false;
+    elements.details.hidden = false;
   } catch (error) {
     console.error("Failed to load today's board", error);
     elements.status.classList.add("error");
@@ -39,13 +43,15 @@ async function loadBoard() {
 function renderBoard(board) {
   elements.brand.textContent = text(board.brand);
   elements.title.textContent = text(board.title);
-  elements.safety.textContent = `安全目安：${text(board.safety_level)}`;
-  elements.updated.textContent = `更新（日本時間）：${text(board.updated_at)}`;
+  elements.updated.textContent = `更新（JST）：${text(board.updated_at)}`;
   elements.summary.textContent = text(board.today_summary);
   elements.beginnerStars.innerHTML = stars(board.overall_beginner_index);
   elements.longboardStars.innerHTML = stars(board.overall_longboard_index);
-  elements.beginnerBest.textContent = `おすすめ：${text(board.best_beginner_time)}`;
-  elements.advancedBest.textContent = `おすすめ：${text(board.best_advanced_time)}`;
+  elements.beginnerMessage.textContent = text(board.beginner_main_message);
+  elements.advancedMessage.textContent = text(board.advanced_main_message);
+  elements.beginnerBest.textContent = text(board.best_beginner_time);
+  elements.advancedBest.textContent = text(board.best_advanced_time);
+  elements.localNote.textContent = text(board.local_note);
   elements.notice.textContent = text(board.notice);
   elements.slots.replaceChildren(...(Array.isArray(board.slots) ? board.slots.map(slotCard) : []));
 }
@@ -56,14 +62,14 @@ function slotCard(slot) {
   article.innerHTML = `
     <header class="slot-header">
       <div><h3 class="slot-title">${escapeHtml(slot.label)}</h3><p class="slot-time">${escapeHtml(slot.time_range)}</p></div>
-      <span class="weather-chip">${escapeHtml(slot.status)}</span>
+      <span class="status-chip">${escapeHtml(slot.status)}</span>
     </header>
     <div class="slot-scores">
       <div class="mini-score"><span>初心者</span><strong>${plainStars(slot.beginner_index)}</strong></div>
       <div class="mini-score"><span>ロング</span><strong>${plainStars(slot.longboard_index)}</strong></div>
     </div>
     <p class="slot-message">${escapeHtml(slot.message)}</p>
-    ${slot.caution ? `<ul class="warnings"><li>${escapeHtml(slot.caution)}</li></ul>` : ""}
+    ${slot.caution ? `<p class="caution">${escapeHtml(slot.caution)}</p>` : ""}
   `;
   return article;
 }

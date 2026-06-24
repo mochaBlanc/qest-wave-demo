@@ -10,54 +10,77 @@
   </head>
   <body>
     <main class="page-shell">
-      <header class="hero">
-        <div>
-          <p id="brand-label" class="eyebrow">BIG WAVE</p>
-          <h1 id="board-title">鵠沼<br class="mobile-break" />サーフィン指数</h1>
-          <p class="lede">初心者と経験者ロングボードの判断材料を、時間帯ごとに。</p>
+      <section class="hero-board" aria-labelledby="board-title">
+        <div class="wave-lines" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
         </div>
-        <button id="refresh-button" class="refresh-button" type="button">
-          <span aria-hidden="true">↻</span> 最新表示
-        </button>
-      </header>
+        <div class="enoshima-mark" aria-hidden="true">
+          <span class="island"></span>
+          <span class="tower"></span>
+        </div>
 
-      <section id="status" class="status" role="status">海況データを読み込んでいます…</section>
-
-      <div id="content" class="content" hidden>
-        <section class="summary-card card">
-          <div class="summary-topline">
-            <span id="safety-level" class="safety-pill"></span>
-            <span id="updated-at" class="updated-at"></span>
+        <header class="hero-header">
+          <div>
+            <p id="brand-label" class="brand">BIG WAVE</p>
+            <h1 id="board-title">鵠沼サーフィン指数</h1>
           </div>
+          <button id="refresh-button" class="refresh-button" type="button">
+            <span aria-hidden="true">↻</span>
+            最新表示
+          </button>
+        </header>
+
+        <div id="status" class="status" role="status">海況データを読み込んでいます…</div>
+
+        <div id="content" class="content" hidden>
+          <p id="updated-at" class="updated-at"></p>
           <p id="today-summary" class="summary-text"></p>
-          <div class="index-grid">
-            <article class="index-item">
-              <p class="index-label">初心者</p>
-              <p id="beginner-stars" class="stars" aria-label="初心者指数"></p>
-              <p id="beginner-best" class="best-time"></p>
-            </article>
-            <article class="index-item">
-              <p class="index-label">経験者ロングボード</p>
-              <p id="longboard-stars" class="stars" aria-label="ロングボード指数"></p>
-              <p id="advanced-best" class="best-time"></p>
-            </article>
-          </div>
-        </section>
 
+          <section class="score-grid" aria-label="メイン指数">
+            <article class="score-card">
+              <p class="card-label">初心者指数</p>
+              <p id="beginner-stars" class="stars" aria-label="初心者指数"></p>
+              <p id="beginner-message" class="score-message"></p>
+            </article>
+            <article class="score-card">
+              <p class="card-label">ロングボード指数</p>
+              <p id="longboard-stars" class="stars" aria-label="ロングボード指数"></p>
+              <p id="advanced-message" class="score-message"></p>
+            </article>
+          </section>
+
+          <section class="best-time-grid" aria-label="おすすめ時間">
+            <article class="best-time-card">
+              <p class="card-label">初心者おすすめ時間</p>
+              <strong id="beginner-best"></strong>
+            </article>
+            <article class="best-time-card">
+              <p class="card-label">ロングボードおすすめ時間</p>
+              <strong id="advanced-best"></strong>
+            </article>
+          </section>
+        </div>
+      </section>
+
+      <div id="details" class="details" hidden>
         <section aria-labelledby="slots-title">
           <div class="section-heading">
-            <div>
-              <p class="section-kicker">TIME SLOTS</p>
-              <h2 id="slots-title">時間帯別コンディション</h2>
-            </div>
+            <p class="section-kicker">TIME BOARD</p>
+            <h2 id="slots-title">時間帯別コンディション</h2>
           </div>
           <div id="slot-grid" class="slot-grid"></div>
         </section>
 
-        <aside class="notice-card card">
-          <span class="notice-icon" aria-hidden="true">i</span>
-          <p id="notice"></p>
+        <aside class="local-note">
+          <p class="info-label">鵠沼ローカルメモ</p>
+          <p id="local-note"></p>
         </aside>
+
+        <footer class="notice">
+          <p id="notice"></p>
+        </footer>
       </div>
     </main>
   </body>
