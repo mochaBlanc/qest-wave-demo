@@ -10,56 +10,45 @@
   </head>
   <body>
     <main class="page-shell">
-      <section class="hero-board" aria-labelledby="board-title">
-        <div class="wave-lines" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div class="enoshima-mark" aria-hidden="true">
-          <span class="island"></span>
-          <span class="tower"></span>
-        </div>
-
-        <header class="hero-header">
-          <div>
+      <section class="forecast-board" aria-labelledby="board-title">
+        <header class="board-header">
+          <div class="title-group">
             <p id="brand-label" class="brand">BIG WAVE</p>
             <h1 id="board-title">鵠沼サーフィン指数</h1>
+            <p id="updated-at" class="updated-at">更新（JST）：—</p>
           </div>
-          <button id="refresh-button" class="refresh-button" type="button">
-            <span aria-hidden="true">↻</span>
-            最新表示
-          </button>
+          <button id="refresh-button" class="refresh-button" type="button">更新</button>
         </header>
+
+        <div class="wave-divider" aria-hidden="true"></div>
 
         <div id="status" class="status" role="status">海況データを読み込んでいます…</div>
 
         <div id="content" class="content" hidden>
-          <p id="updated-at" class="updated-at"></p>
-          <p id="today-summary" class="summary-text"></p>
+          <section class="summary-box" aria-label="本日の概要">
+            <p id="today-summary" class="summary-text"></p>
+          </section>
 
           <section class="score-grid" aria-label="メイン指数">
             <article class="score-card">
-              <p class="card-label">初心者指数</p>
-              <p id="beginner-stars" class="stars" aria-label="初心者指数"></p>
+              <div class="score-head">
+                <p class="card-label">初心者指数</p>
+                <p id="beginner-stars" class="score-value" aria-label="初心者指数"></p>
+              </div>
               <p id="beginner-message" class="score-message"></p>
             </article>
             <article class="score-card">
-              <p class="card-label">ロングボード指数</p>
-              <p id="longboard-stars" class="stars" aria-label="ロングボード指数"></p>
+              <div class="score-head">
+                <p class="card-label">ロングボード指数</p>
+                <p id="longboard-stars" class="score-value" aria-label="ロングボード指数"></p>
+              </div>
               <p id="advanced-message" class="score-message"></p>
             </article>
           </section>
 
-          <section class="best-time-grid" aria-label="おすすめ時間">
-            <article class="best-time-card">
-              <p class="card-label">初心者おすすめ時間</p>
-              <strong id="beginner-best"></strong>
-            </article>
-            <article class="best-time-card">
-              <p class="card-label">ロングボードおすすめ時間</p>
-              <strong id="advanced-best"></strong>
-            </article>
+          <section class="best-time-board" aria-label="おすすめ時間">
+            <p><span>初心者おすすめ</span><strong id="beginner-best"></strong></p>
+            <p><span>ロングおすすめ</span><strong id="advanced-best"></strong></p>
           </section>
         </div>
       </section>
@@ -67,8 +56,8 @@
       <div id="details" class="details" hidden>
         <section aria-labelledby="slots-title">
           <div class="section-heading">
-            <p class="section-kicker">TIME BOARD</p>
-            <h2 id="slots-title">時間帯別コンディション</h2>
+            <p class="section-kicker">時間帯別</p>
+            <h2 id="slots-title">コンディション</h2>
           </div>
           <div id="slot-grid" class="slot-grid"></div>
         </section>

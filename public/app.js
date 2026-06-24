@@ -76,7 +76,7 @@ function slotCard(slot) {
 
 function stars(value) {
   const score = scoreValue(value);
-  return `${"★".repeat(score)}<span class="empty">${"★".repeat(5 - score)}</span>`;
+  return `<span class="score-number">${score} / 5</span><span class="score-stars">${"★".repeat(score)}<span class="empty">${"★".repeat(5 - score)}</span></span>`;
 }
 
 function plainStars(value) {
