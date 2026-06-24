@@ -52,21 +52,14 @@ function slotCard(slot) {
   article.innerHTML = `
     <header class="slot-header">
       <div><h3 class="slot-title">${escapeHtml(slot.label)}</h3><p class="slot-time">${escapeHtml(slot.time_range)}</p></div>
-      <span class="weather-chip">${escapeHtml(slot.weather)}</span>
+      <span class="weather-chip">${escapeHtml(slot.status)}</span>
     </header>
     <div class="slot-scores">
-      <div class="mini-score"><span>初心者</span><strong>${plainStars(slot.rule_beginner_score)}</strong></div>
-      <div class="mini-score"><span>ロング</span><strong>${plainStars(slot.rule_longboard_score)}</strong></div>
+      <div class="mini-score"><span>初心者</span><strong>${plainStars(slot.beginner_index)}</strong></div>
+      <div class="mini-score"><span>ロング</span><strong>${plainStars(slot.longboard_index)}</strong></div>
     </div>
-    <dl class="metrics">
-      ${metric("波高", `${number(slot.wave_height_m)} m`)}
-      ${metric("うねり", `${number(slot.swell_height_m)} m / ${number(slot.swell_period_s)} s`)}
-      ${metric("うねり向き", `${number(slot.swell_direction_deg, 0)}°`)}
-      ${metric("風", `${number(slot.wind_speed_ms)} m/s`)}
-      ${metric("風向・傾向", `${number(slot.wind_direction_deg, 0)}° ${text(slot.wind_type)}`)}
-      ${metric("降水量", `${number(slot.rain_mm)} mm`)}
-    </dl>
-    ${warnings(slot.warnings)}
+    <p class="slot-message">${escapeHtml(slot.message)}</p>
+    ${slot.caution ? `<ul class="warnings"><li>${escapeHtml(slot.caution)}</li></ul>` : ""}
   `;
   return article;
 }

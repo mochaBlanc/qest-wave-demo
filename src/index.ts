@@ -40,6 +40,16 @@ interface SlotData {
   rule_longboard_score: number;
 }
 
+interface DisplaySlot {
+  label: string;
+  time_range: string;
+  beginner_index: number;
+  longboard_index: number;
+  status: string;
+  message: string;
+  caution: string | null;
+}
+
 interface ConditionData {
   mode: "today_board";
   location: string;
@@ -53,13 +63,20 @@ interface ConditionData {
 
 interface TodayBoard {
   updated_at: string;
+  spot: string;
+  brand: string;
+  title: string;
   today_summary: string;
   overall_beginner_index: number;
   overall_longboard_index: number;
   best_beginner_time: string;
   best_advanced_time: string;
   safety_level: string;
-  slots: SlotData[];
+  beginner_main_message: string;
+  advanced_main_message: string;
+  slots: DisplaySlot[];
+  local_note: string;
+  ai_comment_status: string;
   notice: string;
 }
 
@@ -94,14 +111,22 @@ const FALLBACK_SLOTS: SlotData[] = [
 
 const FALLBACK_BOARD: TodayBoard = {
   updated_at: "デモデータ（未更新）",
+  spot: "鵠沼海岸",
+  brand: "BIG WAVE",
+  title: "鵠沼サーフィン指数",
   today_summary: "早朝は風が弱く、初心者スクールとロングボードの練習に比較的合わせやすい見込みです。",
   overall_beginner_index: 4,
   overall_longboard_index: 4,
-  best_beginner_time: "早朝 06:00-09:00",
-  best_advanced_time: "早朝 06:00-09:00",
-  safety_level: "通常注意",
-  slots: FALLBACK_SLOTS,
-  notice: "これは公開用の非公式デモです。実際の入水前に現地の波、風、混雑、ライフガード情報を必ず確認してください。",
+  best_beginner_time: "06:00〜09:00",
+  best_advanced_time: "06:00〜09:00",
+  safety_level: "safe",
+  beginner_main_message: "風が弱い早朝が、初心者スクールには比較的合わせやすい見込みです。",
+  advanced_main_message: "ロングボード経験者も、早めの時間帯が狙いやすい見込みです。",
+  slots: FALLBACK_SLOTS.map(displaySlotFromCondition),
+  local_note: "江の島寄りは少し穏やかに見える場合があります。",
+  ai_comment_status: "fallback",
+  notice:
+    "この指数はAIと気象・海況データによる参考情報です。海の状況は急に変わることがあります。実際に海に入るかどうかは、現地の状況を確認して判断してください。",
 };
 
 export default {
@@ -113,8 +138,8 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/api/today") {
-      const cached = await env.QEST_KV.get<TodayBoard>(BOARD_KEY, "json");
-      return json(cached ?? FALLBACK_BOARD);
+      const cached = await env.QEST_KV.get<unknown>(BOARD_KEY, "json");
+      return json(isRecord(cached) ? normalizeStoredBoard(cached) : FALLBACK_BOARD);
     }
 
     if (request.method === "GET" && url.pathname === "/api/refresh") {
@@ -272,33 +297,107 @@ function normalizeBoard(result: Record<string, unknown>, condition: ConditionDat
   const longboardBest = bestSlot(condition.slots, "rule_longboard_score");
   return {
     updated_at: condition.updated_at,
+    spot: "鵠沼海岸",
+    brand: "BIG WAVE",
+    title: "鵠沼サーフィン指数",
     today_summary: asString(result.today_summary, "最新の海況予報を時間帯別に整理しました。"),
     overall_beginner_index: asScore(result.overall_beginner_index, beginnerBest.rule_beginner_score),
     overall_longboard_index: asScore(result.overall_longboard_index, longboardBest.rule_longboard_score),
-    best_beginner_time: asString(result.best_beginner_time, `${beginnerBest.label} ${beginnerBest.time_range}`),
-    best_advanced_time: asString(result.best_advanced_time, `${longboardBest.label} ${longboardBest.time_range}`),
-    safety_level: asString(result.safety_level, inferSafety(condition.slots)),
-    slots: Array.isArray(result.slots) ? mergeSlots(result.slots, condition.slots) : condition.slots,
+    best_beginner_time: asString(result.best_beginner_time, displayTimeRange(beginnerBest.time_range)),
+    best_advanced_time: asString(result.best_advanced_time, displayTimeRange(longboardBest.time_range)),
+    safety_level: asString(result.safety_level, inferSafetyStatus(condition.slots)),
+    beginner_main_message: asString(
+      result.beginner_main_message,
+      `${beginnerBest.label}の${displayTimeRange(beginnerBest.time_range)}が初心者には比較的おすすめです。`,
+    ),
+    advanced_main_message: asString(
+      result.advanced_main_message,
+      `${longboardBest.label}の${displayTimeRange(longboardBest.time_range)}がロングボード経験者には比較的おすすめです。`,
+    ),
+    slots: normalizeDisplaySlots(result.slots, condition.slots),
+    local_note: asString(result.local_note, "江の島寄りは少し穏やかに見える場合があります。"),
+    ai_comment_status: asString(result.ai_comment_status, "ok"),
     notice: asString(
       result.notice,
-      "予報に基づく非公式デモです。入水前に現地の波・風・混雑と公式の安全情報を確認してください。",
+      "この指数はAIと気象・海況データによる参考情報です。海の状況は急に変わることがあります。実際に海に入るかどうかは、現地の状況を確認して判断してください。",
     ),
   };
 }
 
-function mergeSlots(rawSlots: unknown[], fallbackSlots: SlotData[]): SlotData[] {
+function normalizeStoredBoard(value: Record<string, unknown>): TodayBoard {
+  return {
+    updated_at: asString(value.updated_at, FALLBACK_BOARD.updated_at),
+    spot: "鵠沼海岸",
+    brand: "BIG WAVE",
+    title: "鵠沼サーフィン指数",
+    today_summary: asString(value.today_summary, FALLBACK_BOARD.today_summary),
+    overall_beginner_index: asScore(value.overall_beginner_index, FALLBACK_BOARD.overall_beginner_index),
+    overall_longboard_index: asScore(value.overall_longboard_index, FALLBACK_BOARD.overall_longboard_index),
+    best_beginner_time: asString(value.best_beginner_time, FALLBACK_BOARD.best_beginner_time),
+    best_advanced_time: asString(value.best_advanced_time, FALLBACK_BOARD.best_advanced_time),
+    safety_level: asString(value.safety_level, FALLBACK_BOARD.safety_level),
+    beginner_main_message: asString(value.beginner_main_message, FALLBACK_BOARD.beginner_main_message),
+    advanced_main_message: asString(value.advanced_main_message, FALLBACK_BOARD.advanced_main_message),
+    slots: normalizeStoredDisplaySlots(value.slots),
+    local_note: asString(value.local_note, FALLBACK_BOARD.local_note),
+    ai_comment_status: asString(value.ai_comment_status, FALLBACK_BOARD.ai_comment_status),
+    notice: asString(value.notice, FALLBACK_BOARD.notice),
+  };
+}
+
+function normalizeDisplaySlots(value: unknown, fallbackSlots: SlotData[]): DisplaySlot[] {
+  const rawSlots = Array.isArray(value) ? value : [];
   return fallbackSlots.map((fallback, index) => {
     const raw = isRecord(rawSlots[index]) ? rawSlots[index] : {};
+    const fallbackDisplay = displaySlotFromCondition(fallback);
     return {
-      ...fallback,
-      label: asString(raw.label, fallback.label),
-      time_range: asString(raw.time_range, fallback.time_range),
-      weather: asString(raw.weather, fallback.weather),
-      warnings: Array.isArray(raw.warnings)
-        ? raw.warnings.filter((item): item is string => typeof item === "string")
-        : fallback.warnings,
+      label: asString(raw.label, fallbackDisplay.label),
+      time_range: displayTimeRange(asString(raw.time_range, fallbackDisplay.time_range)),
+      beginner_index: asScore(raw.beginner_index, fallbackDisplay.beginner_index),
+      longboard_index: asScore(raw.longboard_index, fallbackDisplay.longboard_index),
+      status: asString(raw.status, fallbackDisplay.status),
+      message: asString(raw.message, fallbackDisplay.message),
+      caution: asNullableString(raw.caution, fallbackDisplay.caution),
     };
   });
+}
+
+function normalizeStoredDisplaySlots(value: unknown): DisplaySlot[] {
+  const rawSlots = Array.isArray(value) ? value : [];
+  return FALLBACK_BOARD.slots.map((fallback, index) => {
+    const raw = isRecord(rawSlots[index]) ? rawSlots[index] : {};
+    const warnings = Array.isArray(raw.warnings)
+      ? raw.warnings.filter((item): item is string => typeof item === "string")
+      : [];
+    return {
+      label: asString(raw.label, fallback.label),
+      time_range: displayTimeRange(asString(raw.time_range, fallback.time_range)),
+      beginner_index: asScore(raw.beginner_index, asScore(raw.rule_beginner_score, fallback.beginner_index)),
+      longboard_index: asScore(raw.longboard_index, asScore(raw.rule_longboard_score, fallback.longboard_index)),
+      status: asString(raw.status, fallback.status),
+      message: asString(raw.message, fallback.message),
+      caution: asNullableString(raw.caution, warnings[0] ?? fallback.caution),
+    };
+  });
+}
+
+function displaySlotFromCondition(slot: SlotData): DisplaySlot {
+  const status = slot.rule_beginner_score >= 4 || slot.rule_longboard_score >= 4 ? "おすすめ" : "注意";
+  const message =
+    slot.wind_speed_ms <= 4
+      ? "風が弱く、面が整いやすい時間帯です。"
+      : slot.wind_type === "オンショア"
+        ? "オンショアの影響で面が乱れやすい時間帯です。"
+        : "海況を見ながら無理のない範囲で検討してください。";
+  return {
+    label: slot.label,
+    time_range: displayTimeRange(slot.time_range),
+    beginner_index: slot.rule_beginner_score,
+    longboard_index: slot.rule_longboard_score,
+    status,
+    message,
+    caution: slot.warnings[0] ?? null,
+  };
 }
 
 function indicesForSlot(times: string[], date: string, slot: SlotDefinition): number[] {
@@ -397,10 +496,10 @@ function weatherLabel(code: number): string {
   return "変わりやすい天気";
 }
 
-function inferSafety(slots: SlotData[]): string {
-  if (slots.some((slot) => slot.wave_height_m >= 1.1 || slot.wind_speed_ms >= 8)) return "要注意";
-  if (slots.some((slot) => slot.warnings.length > 0)) return "通常注意";
-  return "比較的穏やか";
+function inferSafetyStatus(slots: SlotData[]): string {
+  if (slots.some((slot) => slot.wave_height_m >= 1.1 || slot.wind_speed_ms >= 8)) return "caution";
+  if (slots.some((slot) => slot.warnings.length > 0)) return "watch";
+  return "safe";
 }
 
 function bestSlot(slots: SlotData[], key: "rule_beginner_score" | "rule_longboard_score"): SlotData {
@@ -470,8 +569,18 @@ function asString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
+function asNullableString(value: unknown, fallback: string | null): string | null {
+  if (value === null) return null;
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
 function asScore(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? clampScore(Math.round(value)) : fallback;
+  const score = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(score) ? clampScore(Math.round(score)) : fallback;
+}
+
+function displayTimeRange(timeRange: string): string {
+  return timeRange.replace("-", "〜");
 }
 
 function clampScore(score: number): number {
