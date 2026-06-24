@@ -2,6 +2,8 @@ const elements = {
   status: document.querySelector("#status"),
   content: document.querySelector("#content"),
   refresh: document.querySelector("#refresh-button"),
+  brand: document.querySelector("#brand-label"),
+  title: document.querySelector("#board-title"),
   safety: document.querySelector("#safety-level"),
   updated: document.querySelector("#updated-at"),
   summary: document.querySelector("#today-summary"),
@@ -35,6 +37,8 @@ async function loadBoard() {
 }
 
 function renderBoard(board) {
+  elements.brand.textContent = text(board.brand);
+  elements.title.textContent = text(board.title);
   elements.safety.textContent = `安全目安：${text(board.safety_level)}`;
   elements.updated.textContent = `更新（日本時間）：${text(board.updated_at)}`;
   elements.summary.textContent = text(board.today_summary);
@@ -64,15 +68,6 @@ function slotCard(slot) {
   return article;
 }
 
-function metric(label, value) {
-  return `<div class="metric"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
-}
-
-function warnings(items) {
-  if (!Array.isArray(items) || items.length === 0) return "";
-  return `<ul class="warnings">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
-}
-
 function stars(value) {
   const score = scoreValue(value);
   return `${"★".repeat(score)}<span class="empty">${"★".repeat(5 - score)}</span>`;
@@ -85,11 +80,6 @@ function plainStars(value) {
 
 function scoreValue(value) {
   return Math.max(1, Math.min(5, Math.round(Number(value) || 1)));
-}
-
-function number(value, digits = 1) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed.toFixed(digits).replace(/\.0$/, "") : "—";
 }
 
 function text(value) {

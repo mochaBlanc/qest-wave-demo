@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="鵠沼海岸の時間帯別サーフィン指数を確認できるQEST向け非公式デモ" />
-    <title>今日の鵠沼サーフィン指数</title>
+    <meta name="description" content="鵠沼海岸の時間帯別サーフィン指数を確認できるBIG WAVEデモ" />
+    <title>鵠沼サーフィン指数</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" defer></script>
   </head>
@@ -12,9 +12,9 @@
     <main class="page-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">QEST向け 非公式デモ</p>
-          <h1>今日の鵠沼<br class="mobile-break" />サーフィン指数</h1>
-          <p class="lede">初心者スクールと経験者ロングボードの判断材料を、時間帯ごとに。</p>
+          <p id="brand-label" class="eyebrow">BIG WAVE</p>
+          <h1 id="board-title">鵠沼<br class="mobile-break" />サーフィン指数</h1>
+          <p class="lede">初心者と経験者ロングボードの判断材料を、時間帯ごとに。</p>
         </div>
         <button id="refresh-button" class="refresh-button" type="button">
           <span aria-hidden="true">↻</span> 最新表示
@@ -32,7 +32,7 @@
           <p id="today-summary" class="summary-text"></p>
           <div class="index-grid">
             <article class="index-item">
-              <p class="index-label">初心者スクール</p>
+              <p class="index-label">初心者</p>
               <p id="beginner-stars" class="stars" aria-label="初心者指数"></p>
               <p id="beginner-best" class="best-time"></p>
             </article>

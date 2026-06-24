@@ -114,13 +114,13 @@ const FALLBACK_BOARD: TodayBoard = {
   spot: "鵠沼海岸",
   brand: "BIG WAVE",
   title: "鵠沼サーフィン指数",
-  today_summary: "早朝は風が弱く、初心者スクールとロングボードの練習に比較的合わせやすい見込みです。",
+  today_summary: "早朝は風が弱く、初心者とロングボードの練習に比較的合わせやすい見込みです。",
   overall_beginner_index: 4,
   overall_longboard_index: 4,
   best_beginner_time: "06:00〜09:00",
   best_advanced_time: "06:00〜09:00",
   safety_level: "safe",
-  beginner_main_message: "風が弱い早朝が、初心者スクールには比較的合わせやすい見込みです。",
+  beginner_main_message: "風が弱い早朝が、初心者には比較的合わせやすい見込みです。",
   advanced_main_message: "ロングボード経験者も、早めの時間帯が狙いやすい見込みです。",
   slots: FALLBACK_SLOTS.map(displaySlotFromCondition),
   local_note: "江の島寄りは少し穏やかに見える場合があります。",
@@ -274,7 +274,7 @@ async function runDify(apiKey: string, condition: ConditionData): Promise<TodayB
         condition_json: JSON.stringify(condition),
       },
       response_mode: "blocking",
-      user: "qest-wave-demo",
+      user: "big-wave-kugenuma",
     }),
   });
 
@@ -477,7 +477,7 @@ function longboardScore(wave: number, period: number, wind: number, windType: Wi
 
 function buildWarnings(wave: number, wind: number, windType: WindType, rain: number): string[] {
   const warnings: string[] = [];
-  if (wave >= 1.1) warnings.push("波が高めです。初心者スクールは現地判断を優先してください");
+  if (wave >= 1.1) warnings.push("波が高めです。初心者は現地判断を優先してください");
   if (wind >= 6) warnings.push("風が強まる予報です");
   if (wind >= 5 && windType === "オンショア") warnings.push("オンショアで面が乱れる可能性があります");
   if (rain > 1) warnings.push("降雨による視界と体温低下に注意してください");

@@ -1,6 +1,6 @@
-# qest-wave-demo
+# big-wave-kugenuma
 
-QEST向け非公式デモ「今日の鵠沼サーフィン指数」です。Cloudflare Workers、Static Assets、KV、Cron Trigger を使い、Open-Meteo の当日予報を Dify Workflow に渡して表示用 JSON を生成します。QEST 公式サイトとは接続しない公開デモです。
+BIG WAVE branded demo「鵠沼サーフィン指数」です。Cloudflare Workers、Static Assets、KV、Cron Trigger を使い、Open-Meteo の当日予報を Dify Workflow に渡して表示用 JSON を生成します。
 
 ## セットアップ
 
@@ -62,7 +62,7 @@ Cloudflare Workers へデプロイ：
 npm run deploy
 ```
 
-デプロイ後に Wrangler が表示する `https://qest-wave-demo.<subdomain>.workers.dev` が public demo URL です。
+Public demo URL は `https://big-wave-kugenuma.saozhu0927.workers.dev` です。
 
 ## API
 
