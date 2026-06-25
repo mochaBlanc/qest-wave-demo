@@ -1,12 +1,18 @@
-const metricTabs = [
-  { label: "総合", key: "general_wave_index" },
-  { label: "レッスン", key: "lesson_index" },
-  { label: "初心者", key: "beginner_index" },
-  { label: "ロング", key: "longboard_index" },
-  { label: "ミッドレングス", key: "midlength_index" },
-  { label: "ショート", key: "shortboard_index" },
-  { label: "経験者", key: "advanced_index" },
+const metricTabGroups = [
+  [
+    { label: "総合", key: "general_wave_index" },
+    { label: "レッスン", key: "lesson_index" },
+    { label: "初心者", key: "beginner_index" },
+    { label: "経験者", key: "advanced_index" },
+  ],
+  [
+    { label: "ロング", key: "longboard_index" },
+    { label: "ミッドレングス", key: "midlength_index" },
+    { label: "ショート", key: "shortboard_index" },
+  ],
 ];
+
+const metricTabs = metricTabGroups.flat();
 
 const forecastElements = {
   status: document.querySelector("#forecast-status"),
@@ -15,8 +21,10 @@ const forecastElements = {
   title: document.querySelector("#forecast-title"),
   meta: document.querySelector("#forecast-meta"),
   area: document.querySelector("#forecast-area"),
+  todayEndedNote: document.querySelector("#today-ended-note"),
   tags: document.querySelector("#tag-selector"),
   days: document.querySelector("#day-selector"),
+  recommendationTitle: document.querySelector("#recommendation-title"),
   recommendations: document.querySelector("#recommendations"),
   heatmap: document.querySelector("#heatmap"),
   detail: document.querySelector("#detail-content"),
@@ -40,7 +48,7 @@ async function loadForecast() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     forecastState.board = await response.json();
     forecastState.metric = forecastState.board.default_metric || "general_wave_index";
-    forecastState.dayIndex = 0;
+    forecastState.dayIndex = defaultDayIndex();
     renderForecast();
     forecastElements.status.hidden = true;
     forecastElements.content.hidden = false;
@@ -55,10 +63,11 @@ function renderForecast() {
   const board = forecastState.board;
   const day = selectedDay();
   forecastElements.brand.textContent = text(board.brand);
-  forecastElements.title.textContent = text(board.title);
+  forecastElements.title.textContent = "鵠沼サーフィン指数予想";
   forecastElements.meta.textContent = `更新（JST）：${text(board.updated_at)}`;
   forecastElements.area.textContent = text(board.area);
   forecastElements.notice.textContent = text(board.notice);
+  forecastElements.todayEndedNote.hidden = !isTodayFullyEnded();
 
   renderTags();
   renderDays();
@@ -72,20 +81,25 @@ function renderForecast() {
 }
 
 function renderTags() {
-  forecastElements.tags.replaceChildren(...metricTabs.map((tab) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `tab-button${tab.key === forecastState.metric ? " active" : ""}`;
-    button.textContent = tab.label;
-    button.addEventListener("click", () => {
-      forecastState.metric = tab.key;
-      forecastState.selected = firstRecommendation() || firstCell(selectedDay());
-      renderTags();
-      renderRecommendations();
-      renderHeatmap();
-      renderDetail();
-    });
-    return button;
+  forecastElements.tags.replaceChildren(...metricTabGroups.map((group) => {
+    const row = document.createElement("div");
+    row.className = "tag-row";
+    row.replaceChildren(...group.map((tab) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `tab-button${tab.key === forecastState.metric ? " active" : ""}`;
+      button.textContent = tab.label;
+      button.addEventListener("click", () => {
+        forecastState.metric = tab.key;
+        forecastState.selected = firstRecommendation() || firstCell(selectedDay());
+        renderTags();
+        renderRecommendations();
+        renderHeatmap();
+        renderDetail();
+      });
+      return button;
+    }));
+    return row;
   }));
 }
 
@@ -94,10 +108,11 @@ function renderDays() {
   forecastElements.days.replaceChildren(...days.map((day, index) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `day-button${index === forecastState.dayIndex ? " active" : ""}`;
+    button.className = `day-button${index === forecastState.dayIndex ? " active" : ""}${isToday(day) ? " today" : ""}`;
     button.innerHTML = `
       <span>${escapeHtml(shortDate(day.date))}</span>
       <strong>${escapeHtml(day.weekday)}</strong>
+      <span class="mode-label">${isToday(day) ? "今日 / 当日データ" : "予測"}</span>
       <em>${escapeHtml(day.confidence)}</em>
     `;
     button.addEventListener("click", () => {
@@ -113,9 +128,12 @@ function renderDays() {
 }
 
 function renderRecommendations() {
+  forecastElements.recommendationTitle.textContent = "この日の候補";
   const recommendations = topRecommendations();
   if (!recommendations.length) {
-    forecastElements.recommendations.textContent = "おすすめ候補がまだありません。";
+    forecastElements.recommendations.textContent = isToday(selectedDay())
+      ? "今日の残り時間帯におすすめ候補がありません。"
+      : "おすすめ候補がまだありません。";
     return;
   }
 
@@ -126,7 +144,7 @@ function renderRecommendations() {
     button.innerHTML = `
       <span>${escapeHtml(item.spot.spot_name)}</span>
       <strong>${escapeHtml(item.slot.label)} / ${escapeHtml(item.slot.time_range)}</strong>
-      <em>${score(item.slot)} / 5</em>
+      <em>${stars(score(item.slot))}</em>
     `;
     button.addEventListener("click", () => {
       forecastState.selected = item;
@@ -154,13 +172,14 @@ function renderHeatmap() {
     cells.className = "heatmap-cells";
     for (const slot of Array.isArray(spot.slots) ? spot.slots : []) {
       const value = score(slot);
+      const past = isPastSlot(day, slot);
       const cell = document.createElement("button");
       cell.type = "button";
-      cell.className = `heat-cell heat-${value}${isSelected(spot, slot) ? " active" : ""}`;
+      cell.className = `heat-cell heat-${value}${past ? " past" : ""}${isSelected(spot, slot) ? " active" : ""}`;
       cell.innerHTML = `
         <span class="heat-label">${escapeHtml(slot.label)}</span>
-        <strong>${value}</strong>
-        <span>${escapeHtml(slot.status)}</span>
+        <strong>${stars(value)}</strong>
+        <span>${escapeHtml(past ? "終了" : slot.status)}</span>
         <em>${escapeHtml(slot.confidence)}</em>
       `;
       cell.addEventListener("click", () => {
@@ -185,16 +204,18 @@ function renderDetail() {
   }
 
   const tab = selectedTab();
+  const selectedDayData = selectedDay();
+  const past = isPastSlot(selectedDayData, selected.slot);
   forecastElements.detail.innerHTML = `
     <div class="detail-head">
       <div>
         <p>${escapeHtml(selected.spot.area)}</p>
         <h3>${escapeHtml(selected.spot.spot_name)}</h3>
       </div>
-      <strong>${score(selected.slot)} / 5</strong>
+      <strong>${stars(score(selected.slot))}</strong>
     </div>
     <dl class="detail-list">
-      <div><dt>時間帯</dt><dd>${escapeHtml(selected.slot.label)} ${escapeHtml(selected.slot.time_range)}</dd></div>
+      <div><dt>時間帯</dt><dd>${escapeHtml(selected.slot.label)} ${escapeHtml(selected.slot.time_range)}${past ? "（終了）" : ""}</dd></div>
       <div><dt>表示指数</dt><dd>${escapeHtml(tab.label)}</dd></div>
       <div><dt>ステータス</dt><dd>${escapeHtml(selected.slot.status)}</dd></div>
       <div><dt>信頼度</dt><dd>${escapeHtml(selected.slot.confidence)}</dd></div>
@@ -208,7 +229,7 @@ function topRecommendations() {
   const day = selectedDay();
   const items = (Array.isArray(day?.spots) ? day.spots : []).flatMap((spot) =>
     (Array.isArray(spot.slots) ? spot.slots : []).map((slot) => ({ spot, slot })),
-  );
+  ).filter((item) => !isPastSlot(day, item.slot));
   const preferMorning = forecastState.metric === "lesson_index" || forecastState.metric === "beginner_index";
   return items
     .sort((a, b) => {
@@ -245,6 +266,67 @@ function score(slot) {
 
 function slotRank(label) {
   return ["早朝", "午前", "午後", "夕方"].indexOf(label);
+}
+
+function defaultDayIndex() {
+  const days = Array.isArray(forecastState.board?.days) ? forecastState.board.days : [];
+  if (!days.length) return 0;
+  const firstDay = days[0];
+  if (isToday(firstDay) && allSlotsEnded(firstDay) && days.length > 1) return 1;
+  return 0;
+}
+
+function isTodayFullyEnded() {
+  const days = Array.isArray(forecastState.board?.days) ? forecastState.board.days : [];
+  const today = days.find((day) => isToday(day));
+  return today ? allSlotsEnded(today) : false;
+}
+
+function allSlotsEnded(day) {
+  const slots = (Array.isArray(day?.spots) ? day.spots : []).flatMap((spot) => Array.isArray(spot.slots) ? spot.slots : []);
+  return slots.length > 0 && slots.every((slot) => isPastSlot(day, slot));
+}
+
+function isPastSlot(day, slot) {
+  return isToday(day) && currentJstMinutes() >= slotEndMinutes(slot?.time_range);
+}
+
+function isToday(day) {
+  return day?.date === currentJstDate();
+}
+
+function currentJstDate() {
+  const parts = jstParts();
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function currentJstMinutes() {
+  const parts = jstParts();
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+function jstParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  return Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+}
+
+function slotEndMinutes(timeRange) {
+  const match = String(timeRange ?? "").match(/(\d{1,2}):(\d{2})\s*[〜~-]\s*(\d{1,2}):(\d{2})/);
+  if (!match) return Number.POSITIVE_INFINITY;
+  return Number(match[3]) * 60 + Number(match[4]);
+}
+
+function stars(value) {
+  const filled = Math.max(1, Math.min(5, Math.round(Number(value) || 1)));
+  return `${"★".repeat(filled)}${"☆".repeat(5 - filled)}`;
 }
 
 function isSelected(spot, slot) {

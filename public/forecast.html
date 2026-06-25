@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="BIG WAVE 湘南7日サーフィン予測ヒートマップ" />
-    <title>湘南7日サーフィン予測</title>
+    <meta name="description" content="BIG WAVE 鵠沼サーフィン指数予想ヒートマップ" />
+    <title>鵠沼サーフィン指数予想</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="/forecast.js" defer></script>
   </head>
@@ -14,7 +14,7 @@
         <header class="board-header">
           <div class="title-group">
             <p id="forecast-brand" class="brand">BIG WAVE</p>
-            <h1 id="forecast-title">湘南7日サーフィン予測</h1>
+            <h1 id="forecast-title">鵠沼サーフィン指数予想</h1>
             <p id="forecast-meta" class="updated-at">更新（JST）：—</p>
             <p id="forecast-area" class="forecast-area">鵠沼・江の島・鎌倉側</p>
           </div>
@@ -24,6 +24,7 @@
         <div class="wave-divider" aria-hidden="true"></div>
 
         <p class="forecast-note">3日目以降は予報が変わりやすいため、前日夜と当日朝に再確認してください。</p>
+        <p id="today-ended-note" class="forecast-note ended-note" hidden>今日の時間帯はすでに終了しています。明日以降の予測を参考にしてください。</p>
 
         <div id="forecast-status" class="status" role="status">7日予測を読み込んでいます…</div>
 
@@ -39,7 +40,7 @@
           <section class="recommendation-box" aria-labelledby="recommendation-title">
             <div class="section-heading compact-heading">
               <p class="section-kicker">おすすめ</p>
-              <h2 id="recommendation-title">今日の候補</h2>
+              <h2 id="recommendation-title">この日の候補</h2>
             </div>
             <div id="recommendations" class="recommendations"></div>
           </section>

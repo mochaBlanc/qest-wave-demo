@@ -397,17 +397,35 @@ h2 {
   line-height: 1.65;
 }
 
+.ended-note {
+  border-color: rgba(147, 96, 31, 0.28);
+  background: #fff8ed;
+  color: var(--caution);
+}
+
 .forecast-content {
   display: grid;
   gap: 14px;
 }
 
-.tag-selector,
+.tag-selector {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-row,
 .day-selector {
   display: flex;
   gap: 8px;
-  overflow-x: auto;
   padding-bottom: 3px;
+}
+
+.tag-row {
+  flex-wrap: wrap;
+}
+
+.day-selector {
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -435,12 +453,21 @@ h2 {
 }
 
 .day-button {
-  flex: 0 0 78px;
+  flex: 0 0 94px;
   display: grid;
   gap: 2px;
   padding: 9px 10px;
   border-radius: 12px;
   text-align: left;
+}
+
+.day-button.today {
+  border-color: rgba(37, 111, 134, 0.34);
+  background: #fbf8f1;
+}
+
+.day-button.today.active {
+  background: var(--ocean);
 }
 
 .day-button span,
@@ -452,6 +479,12 @@ h2 {
 
 .day-button strong {
   font-size: 16px;
+}
+
+.day-button .mode-label {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .recommendation-box,
@@ -501,7 +534,8 @@ h2 {
   grid-column: 2;
   align-self: center;
   color: var(--ocean);
-  font-size: 18px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
   font-style: normal;
   font-weight: 800;
 }
@@ -563,8 +597,21 @@ h2 {
 .heat-cell strong {
   display: block;
   margin: 3px 0;
-  font-size: 24px;
+  font-size: 14px;
+  letter-spacing: 0.01em;
   line-height: 1;
+}
+
+.heat-cell.past {
+  border-color: rgba(24, 49, 60, 0.08);
+  background: #ebe5db;
+  color: rgba(24, 49, 60, 0.58);
+}
+
+.heat-cell.past strong,
+.heat-cell.past span,
+.heat-cell.past em {
+  color: rgba(24, 49, 60, 0.58);
 }
 
 .heat-5 { background: #2f8d8d; color: #fff; }
@@ -594,7 +641,8 @@ h2 {
 
 .detail-head strong {
   color: var(--ocean);
-  font-size: 22px;
+  font-size: 15px;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
