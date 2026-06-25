@@ -280,6 +280,12 @@ export default {
       return json({ error: "Not found" }, 404);
     }
 
+    if (request.method === "GET" && url.pathname === "/forecast") {
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = "/forecast.html";
+      return env.ASSETS.fetch(new Request(assetUrl, request));
+    }
+
     return env.ASSETS.fetch(request);
   },
 
