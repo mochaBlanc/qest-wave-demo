@@ -80,6 +80,68 @@ interface TodayBoard {
   notice: string;
 }
 
+type ForecastConfidence = "high" | "medium" | "low";
+
+interface ForecastSlot {
+  label: string;
+  time_range: string;
+  general_wave_index: number;
+  lesson_index: number;
+  beginner_index: number;
+  longboard_index: number;
+  midlength_index: number;
+  shortboard_index: number;
+  advanced_index: number;
+  status: string;
+  message: string;
+  caution: string | null;
+  confidence: ForecastConfidence;
+}
+
+interface ForecastSpot {
+  spot_id: string;
+  spot_name: string;
+  area: string;
+  slots: ForecastSlot[];
+}
+
+interface ForecastDay {
+  date: string;
+  weekday: string;
+  confidence: ForecastConfidence;
+  summary: string;
+  spots: ForecastSpot[];
+}
+
+interface ForecastBoard {
+  updated_at: string;
+  brand: "BIG WAVE";
+  title: "湘南7日サーフィン予測";
+  area: "鵠沼・江の島・鎌倉側";
+  default_metric: "general_wave_index";
+  tags: string[];
+  days: ForecastDay[];
+  notice: string;
+}
+
+interface RawForecastData {
+  marine: HourlyData;
+  weather: HourlyData;
+}
+
+interface SpotDefinition {
+  spot_id: string;
+  spot_name: string;
+  area: string;
+  waveFactor: number;
+  lessonBonus: number;
+  beginnerBonus: number;
+  longboardBonus: number;
+  midlengthBonus: number;
+  shortboardBonus: number;
+  advancedBonus: number;
+}
+
 interface DifyResponse {
   data?: {
     outputs?: {
@@ -89,6 +151,7 @@ interface DifyResponse {
 }
 
 const BOARD_KEY = "qest_today_board";
+const FORECAST_KEY = "surf:forecast:v1";
 const JSON_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Content-Type": "application/json; charset=utf-8",
@@ -100,6 +163,45 @@ const SLOT_DEFINITIONS: SlotDefinition[] = [
   { label: "午前", time_range: "09:00-11:30", startMinutes: 540, endMinutes: 690 },
   { label: "午後", time_range: "13:30-16:00", startMinutes: 810, endMinutes: 960 },
   { label: "夕方", time_range: "16:00-18:30", startMinutes: 960, endMinutes: 1110 },
+];
+
+const FORECAST_SPOTS: SpotDefinition[] = [
+  {
+    spot_id: "kugenuma_main",
+    spot_name: "鵠沼メイン",
+    area: "鵠沼",
+    waveFactor: 1,
+    lessonBonus: 0,
+    beginnerBonus: 0,
+    longboardBonus: 0,
+    midlengthBonus: 0,
+    shortboardBonus: 0,
+    advancedBonus: 0,
+  },
+  {
+    spot_id: "katase_nishihama",
+    spot_name: "片瀬西浜・水族館前",
+    area: "江の島寄り",
+    waveFactor: 0.88,
+    lessonBonus: 0.4,
+    beginnerBonus: 0.3,
+    longboardBonus: 0.2,
+    midlengthBonus: 0,
+    shortboardBonus: -0.2,
+    advancedBonus: -0.1,
+  },
+  {
+    spot_id: "katase_higashihama_koshigoe",
+    spot_name: "片瀬東浜・腰越",
+    area: "江の島・鎌倉側",
+    waveFactor: 0.68,
+    lessonBonus: 0.2,
+    beginnerBonus: 0.3,
+    longboardBonus: 0,
+    midlengthBonus: -0.2,
+    shortboardBonus: -1,
+    advancedBonus: -0.4,
+  },
 ];
 
 const FALLBACK_SLOTS: SlotData[] = [
@@ -142,6 +244,18 @@ export default {
       return json(isRecord(cached) ? normalizeStoredBoard(cached) : FALLBACK_BOARD);
     }
 
+    if (request.method === "GET" && url.pathname === "/api/forecast") {
+      const cached = await env.QEST_KV.get<ForecastBoard>(FORECAST_KEY, "json");
+      if (cached) return json(cached);
+
+      try {
+        return json(await refreshForecast(env));
+      } catch (error) {
+        console.error("Forecast refresh failed", error);
+        return json({ error: "Forecast unavailable" }, 502);
+      }
+    }
+
     if (request.method === "GET" && url.pathname === "/api/refresh") {
       const secret = url.searchParams.get("secret");
       if (!env.REFRESH_SECRET || secret !== env.REFRESH_SECRET) {
@@ -149,7 +263,13 @@ export default {
       }
 
       try {
-        return json(await refreshBoard(env));
+        const board = await refreshBoard(env);
+        try {
+          await refreshForecast(env);
+        } catch (error) {
+          console.error("Forecast refresh failed during manual refresh; today board was preserved", error);
+        }
+        return json(board);
       } catch (error) {
         console.error("Manual refresh failed", error);
         return json({ error: "Refresh failed; the previous KV value was preserved." }, 502);
@@ -169,6 +289,11 @@ export default {
         console.error("Scheduled refresh failed; existing KV data was preserved", error);
       }),
     );
+    ctx.waitUntil(
+      refreshForecast(env).catch((error: unknown) => {
+        console.error("Scheduled forecast refresh failed; existing KV forecast was preserved", error);
+      }),
+    );
   },
 } satisfies ExportedHandler<Env>;
 
@@ -179,26 +304,19 @@ async function refreshBoard(env: Env): Promise<TodayBoard> {
   return board;
 }
 
+async function refreshForecast(env: Env): Promise<ForecastBoard> {
+  const raw = await fetchRawForecastData(7);
+  const forecast = buildForecastBoard(raw);
+  await env.QEST_KV.put(FORECAST_KEY, JSON.stringify(forecast));
+  return forecast;
+}
+
 async function fetchConditions(): Promise<ConditionData> {
-  const common = "latitude=35.317&longitude=139.472&timezone=Asia%2FTokyo&forecast_days=1";
-  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?${common}&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period`;
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?${common}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,weather_code,cloud_cover&wind_speed_unit=ms`;
-
-  const [marine, weather] = await Promise.all([
-    fetchOpenMeteo(marineUrl, "Marine"),
-    fetchOpenMeteo(weatherUrl, "Weather"),
-  ]);
-
-  if (!marine.hourly || !weather.hourly) {
-    throw new Error("Open-Meteo returned no hourly data");
-  }
-
-  const forecastDate = String(marine.hourly.time[0] ?? weather.hourly.time[0] ?? "").slice(0, 10);
+  const { marine, weather } = await fetchRawForecastData(1);
+  const forecastDate = String(marine.time[0] ?? weather.time[0] ?? "").slice(0, 10);
   if (!forecastDate) throw new Error("Open-Meteo returned no forecast date");
 
-  const slots = SLOT_DEFINITIONS.map((definition) =>
-    aggregateSlot(definition, forecastDate, marine.hourly as HourlyData, weather.hourly as HourlyData),
-  );
+  const slots = SLOT_DEFINITIONS.map((definition) => aggregateSlot(definition, forecastDate, marine, weather));
   const updatedAt = formatJapanDateTime();
 
   return {
@@ -210,6 +328,26 @@ async function fetchConditions(): Promise<ConditionData> {
     generated_at: updatedAt,
     updated_at: updatedAt,
     slots,
+  };
+}
+
+async function fetchRawForecastData(forecastDays: number): Promise<RawForecastData> {
+  const common = `latitude=35.317&longitude=139.472&timezone=Asia%2FTokyo&forecast_days=${forecastDays}`;
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?${common}&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period`;
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?${common}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,weather_code,cloud_cover&wind_speed_unit=ms`;
+
+  const [marineResponse, weatherResponse] = await Promise.all([
+    fetchOpenMeteo(marineUrl, "Marine"),
+    fetchOpenMeteo(weatherUrl, "Weather"),
+  ]);
+
+  if (!marineResponse.hourly || !weatherResponse.hourly) {
+    throw new Error("Open-Meteo returned no hourly data");
+  }
+
+  return {
+    marine: marineResponse.hourly,
+    weather: weatherResponse.hourly,
   };
 }
 
@@ -258,6 +396,295 @@ function aggregateSlot(
     rule_beginner_score: beginnerScore(waveHeight, windSpeed, windType, rain),
     rule_longboard_score: longboardScore(waveHeight, swellPeriod, windSpeed, windType),
   };
+}
+
+function buildForecastBoard(raw: RawForecastData): ForecastBoard {
+  const dates = uniqueDates(raw.marine.time).slice(0, 7);
+  if (!dates.length) throw new Error("Open-Meteo returned no forecast dates");
+
+  const days = dates.map((date, dayIndex) => {
+    const baselineSlots = SLOT_DEFINITIONS.map((definition) => aggregateSlot(definition, date, raw.marine, raw.weather));
+    const spots = FORECAST_SPOTS.map((spot) => ({
+      spot_id: spot.spot_id,
+      spot_name: spot.spot_name,
+      area: spot.area,
+      slots: baselineSlots.map((slot, slotIndex) => forecastSlotForSpot(slot, spot, dayIndex, slotIndex)),
+    }));
+    const allSlots = spots.flatMap((spot) => spot.slots);
+    return {
+      date,
+      weekday: weekdayLabel(date),
+      confidence: reduceConfidence(slotBaseConfidence(dayIndex), allSlots),
+      summary: forecastDaySummary(baselineSlots, spots),
+      spots,
+    };
+  });
+
+  return {
+    updated_at: formatJapanDateTime(),
+    brand: "BIG WAVE",
+    title: "湘南7日サーフィン予測",
+    area: "鵠沼・江の島・鎌倉側",
+    default_metric: "general_wave_index",
+    tags: ["general", "lesson", "beginner", "longboard", "midlength", "shortboard", "advanced"],
+    days,
+    notice: "この予測は気象・海況データと簡易ルールによる参考情報です。実際の海況は現地で確認してください。",
+  };
+}
+
+function forecastSlotForSpot(
+  baseline: SlotData,
+  spot: SpotDefinition,
+  dayIndex: number,
+  slotIndex: number,
+): ForecastSlot {
+  const wave = baseline.wave_height_m * spot.waveFactor;
+  const wind = baseline.wind_speed_ms;
+  const onshore = baseline.wind_type === "オンショア";
+  const afternoon = baseline.label === "午後" || baseline.label === "夕方";
+  const kugenumaTooBigOrRough =
+    baseline.wave_height_m >= 0.95 || wind >= 6 || (baseline.wind_type === "オンショア" && wind >= 5);
+  const higashihamaFallbackBoost =
+    spot.spot_id === "katase_higashihama_koshigoe" && kugenumaTooBigOrRough ? 1.1 : 0;
+  const danger = wave >= 1.35 || baseline.wave_height_m >= 1.5 || wind >= 9;
+  const rough = danger || wave >= 1.05 || wind >= 6 || (onshore && wind >= 5) || baseline.rain_mm > 1.5;
+  const morningBonus = slotIndex <= 1 ? 0.5 : 0;
+  const afternoonPenalty = afternoon && onshore ? 0.8 : afternoon && wind >= 5 ? 0.4 : 0;
+
+  const lesson = scoreLesson(wave, wind, onshore, baseline.rain_mm, morningBonus, afternoonPenalty)
+    + spot.lessonBonus
+    + higashihamaFallbackBoost;
+  const beginner = scoreBeginnerForecast(wave, wind, onshore, baseline.rain_mm, morningBonus, afternoonPenalty)
+    + spot.beginnerBonus
+    + higashihamaFallbackBoost * 0.7;
+  const longboard = scoreLongboardForecast(wave, baseline.swell_period_s, wind, onshore, afternoonPenalty)
+    + spot.longboardBonus;
+  const midlength = scoreMidlengthForecast(wave, baseline.swell_period_s, wind, onshore, afternoonPenalty)
+    + spot.midlengthBonus;
+  const shortboard = scoreShortboardForecast(wave, baseline.swell_period_s, wind, onshore, afternoonPenalty)
+    + spot.shortboardBonus;
+  const advanced = scoreAdvancedForecast(wave, baseline.swell_period_s, wind, onshore, afternoonPenalty)
+    + spot.advancedBonus;
+  const general = (beginner + longboard + midlength + shortboard + advanced) / 5;
+  const confidence = reduceConfidence(slotBaseConfidence(dayIndex), [
+    {
+      confidence: slotBaseConfidence(dayIndex),
+      status: rough ? "慎重" : "まずまず",
+      caution: rough ? "風や波の変化に注意してください。" : null,
+    },
+  ]);
+
+  return {
+    label: baseline.label,
+    time_range: displayTimeRange(baseline.time_range),
+    general_wave_index: clampScore(Math.round(general)),
+    lesson_index: danger ? 1 : clampScore(Math.round(lesson)),
+    beginner_index: danger ? 1 : clampScore(Math.round(beginner)),
+    longboard_index: clampScore(Math.round(danger ? longboard - 2 : longboard)),
+    midlength_index: clampScore(Math.round(danger ? midlength - 1 : midlength)),
+    shortboard_index: clampScore(Math.round(danger ? shortboard - 1 : shortboard)),
+    advanced_index: clampScore(Math.round(danger ? advanced - 1 : advanced)),
+    status: forecastStatus(danger, rough, lesson, general),
+    message: forecastMessage(spot, baseline, wave, wind, onshore, higashihamaFallbackBoost > 0),
+    caution: forecastCaution(danger, rough, baseline, wave, wind, onshore),
+    confidence,
+  };
+}
+
+function scoreLesson(
+  wave: number,
+  wind: number,
+  onshore: boolean,
+  rain: number,
+  morningBonus: number,
+  afternoonPenalty: number,
+): number {
+  let score = 3 + morningBonus - afternoonPenalty;
+  if (wave >= 0.2 && wave <= 0.55) score += 2;
+  else if (wave > 0.55 && wave <= 0.75) score += 1;
+  else if (wave < 0.15) score -= 1;
+  if (wave >= 0.9) score -= 2;
+  if (wave >= 1.1) score -= 2;
+  if (wind <= 3) score += 1;
+  if (wind >= 5) score -= 1;
+  if (onshore && wind >= 5) score -= 1.5;
+  if (rain > 1) score -= 1;
+  return score;
+}
+
+function scoreBeginnerForecast(
+  wave: number,
+  wind: number,
+  onshore: boolean,
+  rain: number,
+  morningBonus: number,
+  afternoonPenalty: number,
+): number {
+  let score = 3 + morningBonus * 0.6 - afternoonPenalty;
+  if (wave >= 0.2 && wave <= 0.65) score += 2;
+  else if (wave > 0.65 && wave <= 0.85) score += 1;
+  else if (wave < 0.15) score -= 1;
+  if (wave >= 1.0) score -= 2;
+  if (wind <= 4) score += 1;
+  if (onshore && wind >= 5) score -= 1.5;
+  if (rain > 1) score -= 1;
+  return score;
+}
+
+function scoreLongboardForecast(
+  wave: number,
+  period: number,
+  wind: number,
+  onshore: boolean,
+  afternoonPenalty: number,
+): number {
+  let score = 3 - afternoonPenalty * 0.8;
+  if (wave >= 0.3 && wave <= 0.9) score += 1.5;
+  if (wave < 0.2) score -= 1;
+  if (wave > 1.2) score -= 1;
+  if (period >= 7 && period <= 11) score += 1;
+  if (wind <= 4) score += 1;
+  if (onshore && wind >= 6) score -= 2;
+  return score;
+}
+
+function scoreMidlengthForecast(
+  wave: number,
+  period: number,
+  wind: number,
+  onshore: boolean,
+  afternoonPenalty: number,
+): number {
+  let score = 3 - afternoonPenalty * 0.7;
+  if (wave >= 0.45 && wave <= 1.1) score += 2;
+  else if (wave >= 0.3 && wave < 0.45) score += 1;
+  if (wave < 0.25) score -= 1;
+  if (wave > 1.4) score -= 1;
+  if (period >= 7) score += 0.7;
+  if (wind <= 5) score += 0.5;
+  if (onshore && wind >= 6) score -= 2;
+  return score;
+}
+
+function scoreShortboardForecast(
+  wave: number,
+  period: number,
+  wind: number,
+  onshore: boolean,
+  afternoonPenalty: number,
+): number {
+  let score = 2.5 - afternoonPenalty * 0.6;
+  if (wave >= 0.7 && wave <= 1.4) score += 2;
+  else if (wave >= 0.5 && wave < 0.7) score += 1;
+  if (wave < 0.45) score -= 2;
+  if (period >= 8) score += 1;
+  if (wind <= 4) score += 0.5;
+  if (onshore && wind >= 6) score -= 1.5;
+  return score;
+}
+
+function scoreAdvancedForecast(
+  wave: number,
+  period: number,
+  wind: number,
+  onshore: boolean,
+  afternoonPenalty: number,
+): number {
+  let score = 3 - afternoonPenalty * 0.4;
+  if (wave >= 0.6 && wave <= 1.6) score += 2;
+  if (wave < 0.35) score -= 1;
+  if (wave > 1.8) score -= 1;
+  if (period >= 8) score += 1;
+  if (wind <= 5) score += 0.8;
+  if (onshore && wind >= 7) score -= 2;
+  return score;
+}
+
+function forecastStatus(danger: boolean, rough: boolean, lesson: number, general: number): string {
+  if (danger) return "非推奨";
+  if (rough || lesson <= 2) return "慎重";
+  if (lesson >= 4 || general >= 4) return "おすすめ";
+  return "まずまず";
+}
+
+function forecastMessage(
+  spot: SpotDefinition,
+  slot: SlotData,
+  wave: number,
+  wind: number,
+  onshore: boolean,
+  fallbackBoost: boolean,
+): string {
+  if (fallbackBoost) {
+    return "鵠沼が大きめ・荒れ気味の時の初心者レッスン代替候補です。";
+  }
+  if (spot.spot_id === "katase_nishihama" && wave <= 0.8) {
+    return "鵠沼より少し穏やかに使いやすい可能性があります。";
+  }
+  if (wave < 0.25) return "かなり小さめで、練習はしやすい一方で推進力は弱めです。";
+  if (wave <= 0.65 && wind <= 4) return "小さめでまとまりやすく、基礎練習に向きやすい時間帯です。";
+  if (onshore && wind >= 5) return "オンショアの影響で面が乱れやすい見込みです。";
+  if (slot.wave_height_m >= 1.0) return "サイズが出やすく、経験や現地判断が必要です。";
+  return "風と波のバランスを見ながら練習候補にできます。";
+}
+
+function forecastCaution(
+  danger: boolean,
+  rough: boolean,
+  slot: SlotData,
+  wave: number,
+  wind: number,
+  onshore: boolean,
+): string | null {
+  if (danger) return "波・風が強い可能性があります。初心者レッスンは非推奨です。";
+  if (wave >= 1.0) return "初心者はサイズと流れを現地で確認してください。";
+  if (onshore && wind >= 5) return "オンショアで面が乱れやすく、午後は特に慎重に判断してください。";
+  if (wind >= 6) return "風が強めです。移動や待機も含めて余裕を持ってください。";
+  if (slot.rain_mm > 1.5) return "雨による視界低下や体温低下に注意してください。";
+  return rough ? "コンディション変化に注意してください。" : null;
+}
+
+function uniqueDates(times: string[]): string[] {
+  const dates: string[] = [];
+  for (const time of times) {
+    const date = time.slice(0, 10);
+    if (date && !dates.includes(date)) dates.push(date);
+  }
+  return dates;
+}
+
+function weekdayLabel(date: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", weekday: "short" }).format(
+    new Date(`${date}T00:00:00+09:00`),
+  );
+}
+
+function slotBaseConfidence(dayIndex: number): ForecastConfidence {
+  if (dayIndex <= 1) return "high";
+  if (dayIndex <= 3) return "medium";
+  return "low";
+}
+
+function reduceConfidence(
+  base: ForecastConfidence,
+  slots: Array<Pick<ForecastSlot, "confidence" | "status" | "caution">>,
+): ForecastConfidence {
+  const unstable = slots.some((slot) => slot.status === "非推奨" || slot.status === "慎重" || slot.caution);
+  if (!unstable) return base;
+  if (base === "high") return "medium";
+  return "low";
+}
+
+function forecastDaySummary(baselineSlots: SlotData[], spots: ForecastSpot[]): string {
+  const bestLesson = spots
+    .flatMap((spot) => spot.slots.map((slot) => ({ spot, slot })))
+    .sort((a, b) => b.slot.lesson_index - a.slot.lesson_index)[0];
+  const maxWave = Math.max(...baselineSlots.map((slot) => slot.wave_height_m));
+  if (!bestLesson) return "時間帯ごとの波と風を確認して、無理のない範囲で計画してください。";
+  if (maxWave >= 1.1 && bestLesson.spot.spot_id === "katase_higashihama_koshigoe") {
+    return "鵠沼が大きめの日は、江の島・鎌倉側の穏やかな時間帯を代替候補にできます。";
+  }
+  return `${bestLesson.spot.spot_name}の${bestLesson.slot.label}が、レッスン・基礎練習の第一候補です。`;
 }
 
 async function runDify(apiKey: string, condition: ConditionData): Promise<TodayBoard> {
