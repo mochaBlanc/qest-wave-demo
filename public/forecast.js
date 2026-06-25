@@ -1,11 +1,11 @@
 const metricTabs = [
-  { label: "通用", key: "general_wave_index" },
-  { label: "约课", key: "lesson_index" },
-  { label: "初学者", key: "beginner_index" },
-  { label: "长板", key: "longboard_index" },
-  { label: "Mid Length", key: "midlength_index" },
-  { label: "短板", key: "shortboard_index" },
-  { label: "经验者", key: "advanced_index" },
+  { label: "総合", key: "general_wave_index" },
+  { label: "レッスン", key: "lesson_index" },
+  { label: "初心者", key: "beginner_index" },
+  { label: "ロング", key: "longboard_index" },
+  { label: "ミッドレングス", key: "midlength_index" },
+  { label: "ショート", key: "shortboard_index" },
+  { label: "経験者", key: "advanced_index" },
 ];
 
 const forecastElements = {
@@ -195,7 +195,7 @@ function renderDetail() {
     </div>
     <dl class="detail-list">
       <div><dt>時間帯</dt><dd>${escapeHtml(selected.slot.label)} ${escapeHtml(selected.slot.time_range)}</dd></div>
-      <div><dt>表示指数</dt><dd>${escapeHtml(tab.label)} / ${escapeHtml(tab.key)}</dd></div>
+      <div><dt>表示指数</dt><dd>${escapeHtml(tab.label)}</dd></div>
       <div><dt>ステータス</dt><dd>${escapeHtml(selected.slot.status)}</dd></div>
       <div><dt>信頼度</dt><dd>${escapeHtml(selected.slot.confidence)}</dd></div>
     </dl>
