@@ -219,8 +219,11 @@ function renderDetail() {
       <div><dt>表示指数</dt><dd>${escapeHtml(tab.label)}</dd></div>
       <div><dt>ステータス</dt><dd>${escapeHtml(selected.slot.status)}</dd></div>
       <div><dt>信頼度</dt><dd>${escapeHtml(selected.slot.confidence)}</dd></div>
+      <div><dt>水温</dt><dd>${escapeHtml(formatWaterTemp(selected.slot.water_temp_c))}</dd></div>
+      <div><dt>ウェット</dt><dd>${escapeHtml(selected.slot.wetsuit_label)} / ${escapeHtml(selected.slot.wetsuit_thickness)}</dd></div>
     </dl>
     <p class="detail-message">${escapeHtml(selected.slot.message)}</p>
+    ${selected.slot.wetsuit_note ? `<p class="wetsuit-note">${escapeHtml(selected.slot.wetsuit_note)}</p>` : ""}
     ${selected.slot.caution ? `<p class="caution">${escapeHtml(selected.slot.caution)}</p>` : ""}
   `;
 }
@@ -327,6 +330,11 @@ function slotEndMinutes(timeRange) {
 function stars(value) {
   const filled = Math.max(1, Math.min(5, Math.round(Number(value) || 1)));
   return `${"★".repeat(filled)}${"☆".repeat(5 - filled)}`;
+}
+
+function formatWaterTemp(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? `${numeric.toFixed(1)}℃` : "—";
 }
 
 function isSelected(spot, slot) {

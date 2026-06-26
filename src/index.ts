@@ -40,6 +40,11 @@ interface SlotData {
   rule_longboard_score: number;
 }
 
+interface ForecastCondition extends SlotData {
+  water_temp_c: number;
+  air_temp_c: number;
+}
+
 interface DisplaySlot {
   label: string;
   time_range: string;
@@ -96,6 +101,10 @@ interface ForecastSlot {
   message: string;
   caution: string | null;
   confidence: ForecastConfidence;
+  water_temp_c: number;
+  wetsuit_label: string;
+  wetsuit_thickness: string;
+  wetsuit_note: string;
 }
 
 interface ForecastSpot {
@@ -121,6 +130,7 @@ interface ForecastBoard {
   default_metric: "general_wave_index";
   tags: string[];
   days: ForecastDay[];
+  wetsuit_notice: string;
   notice: string;
 }
 
@@ -245,8 +255,8 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/api/forecast") {
-      const cached = await env.QEST_KV.get<ForecastBoard>(FORECAST_KEY, "json");
-      if (cached) return json(cached);
+      const cached = await env.QEST_KV.get<unknown>(FORECAST_KEY, "json");
+      if (isRecord(cached) && forecastHasWetsuitData(cached)) return json(cached);
 
       try {
         return json(await refreshForecast(env));
@@ -339,8 +349,8 @@ async function fetchConditions(): Promise<ConditionData> {
 
 async function fetchRawForecastData(forecastDays: number): Promise<RawForecastData> {
   const common = `latitude=35.317&longitude=139.472&timezone=Asia%2FTokyo&forecast_days=${forecastDays}`;
-  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?${common}&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period`;
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?${common}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,weather_code,cloud_cover&wind_speed_unit=ms`;
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?${common}&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,sea_surface_temperature`;
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?${common}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,weather_code,cloud_cover&wind_speed_unit=ms`;
 
   const [marineResponse, weatherResponse] = await Promise.all([
     fetchOpenMeteo(marineUrl, "Marine"),
@@ -354,6 +364,25 @@ async function fetchRawForecastData(forecastDays: number): Promise<RawForecastDa
   return {
     marine: marineResponse.hourly,
     weather: weatherResponse.hourly,
+  };
+}
+
+function aggregateForecastSlot(
+  definition: SlotDefinition,
+  date: string,
+  marine: HourlyData,
+  weather: HourlyData,
+): ForecastCondition {
+  const slot = aggregateSlot(definition, date, marine, weather);
+  const marineIndices = indicesForSlot(marine.time, date, definition);
+  const weatherIndices = indicesForSlot(weather.time, date, definition);
+  const airTemp = optionalAverageAt(weather.temperature_2m, weatherIndices) ?? 20;
+  const waterTemp = optionalAverageAt(marine.sea_surface_temperature, marineIndices) ?? airTemp;
+
+  return {
+    ...slot,
+    water_temp_c: round(waterTemp, 1),
+    air_temp_c: round(airTemp, 1),
   };
 }
 
@@ -409,7 +438,7 @@ function buildForecastBoard(raw: RawForecastData): ForecastBoard {
   if (!dates.length) throw new Error("Open-Meteo returned no forecast dates");
 
   const days = dates.map((date, dayIndex) => {
-    const baselineSlots = SLOT_DEFINITIONS.map((definition) => aggregateSlot(definition, date, raw.marine, raw.weather));
+    const baselineSlots = SLOT_DEFINITIONS.map((definition) => aggregateForecastSlot(definition, date, raw.marine, raw.weather));
     const spots = FORECAST_SPOTS.map((spot) => ({
       spot_id: spot.spot_id,
       spot_name: spot.spot_name,
@@ -434,12 +463,14 @@ function buildForecastBoard(raw: RawForecastData): ForecastBoard {
     default_metric: "general_wave_index",
     tags: ["general", "lesson", "beginner", "longboard", "midlength", "shortboard", "advanced"],
     days,
+    wetsuit_notice:
+      "水温・気温・風・体感には個人差があります。寒がりの方やレッスンでは一段暖かめを選ぶと安心です。",
     notice: "この予測は気象・海況データと簡易ルールによる参考情報です。実際の海況は現地で確認してください。",
   };
 }
 
 function forecastSlotForSpot(
-  baseline: SlotData,
+  baseline: ForecastCondition,
   spot: SpotDefinition,
   dayIndex: number,
   slotIndex: number,
@@ -479,6 +510,12 @@ function forecastSlotForSpot(
       caution: rough ? "風や波の変化に注意してください。" : null,
     },
   ]);
+  const wetsuit = wetsuitRecommendation(baseline.water_temp_c, {
+    airTemp: baseline.air_temp_c,
+    wind,
+    rain: baseline.rain_mm,
+    weather: baseline.weather,
+  });
 
   return {
     label: baseline.label,
@@ -494,6 +531,10 @@ function forecastSlotForSpot(
     message: forecastMessage(spot, baseline, wave, wind, onshore, higashihamaFallbackBoost > 0),
     caution: forecastCaution(danger, rough, baseline, wave, wind, onshore),
     confidence,
+    water_temp_c: baseline.water_temp_c,
+    wetsuit_label: wetsuit.label,
+    wetsuit_thickness: wetsuit.thickness,
+    wetsuit_note: wetsuit.note,
   };
 }
 
@@ -648,6 +689,54 @@ function forecastCaution(
   if (wind >= 6) return "風が強めです。移動や待機も含めて余裕を持ってください。";
   if (slot.rain_mm > 1.5) return "雨による視界低下や体温低下に注意してください。";
   return rough ? "コンディション変化に注意してください。" : null;
+}
+
+function wetsuitRecommendation(
+  waterTemp: number,
+  condition: { airTemp: number; wind: number; rain: number; weather: string },
+): { label: string; thickness: string; note: string } {
+  const base =
+    waterTemp >= 24
+      ? { label: "タッパー / スプリング目安", thickness: "1〜2mm" }
+      : waterTemp >= 21
+        ? { label: "スプリング / ロングスプリング目安", thickness: "2mm〜3/2mm" }
+        : waterTemp >= 18
+          ? { label: "シーガル / 3mmフル目安", thickness: "3/2mm" }
+          : waterTemp >= 15
+            ? { label: "3mmフル / 4/3mm目安", thickness: "3/2mm〜4/3mm" }
+            : waterTemp >= 12
+              ? { label: "4/3mmフル + ブーツ検討", thickness: "4/3mm" }
+              : { label: "セミドライ + 防寒小物目安", thickness: "5/3mm〜5/4mm" };
+
+  const feelsCold =
+    condition.wind >= 6 ||
+    condition.rain > 0 ||
+    condition.airTemp <= 18 ||
+    condition.weather.includes("雨") ||
+    condition.weather.includes("雪");
+
+  const note = feelsCold
+    ? "風・雨・低めの気温で体感が下がりやすい見込みです。レッスンや初心者練習では待ち時間もあるため、一段暖かめを選ぶと安心です。"
+    : "風が弱ければ軽めでも入りやすいですが、レッスンや初心者練習では待ち時間もあるため、冷え対策で一段暖かめが安心です。";
+
+  return { ...base, note };
+}
+
+function forecastHasWetsuitData(value: Record<string, unknown>): boolean {
+  const days = value.days;
+  if (!Array.isArray(days) || !days.length || typeof value.wetsuit_notice !== "string") return false;
+  const firstDay = days[0];
+  if (!isRecord(firstDay) || !Array.isArray(firstDay.spots)) return false;
+  const firstSpot = firstDay.spots[0];
+  if (!isRecord(firstSpot) || !Array.isArray(firstSpot.slots)) return false;
+  const firstSlot = firstSpot.slots[0];
+  return (
+    isRecord(firstSlot) &&
+    typeof firstSlot.water_temp_c === "number" &&
+    typeof firstSlot.wetsuit_label === "string" &&
+    typeof firstSlot.wetsuit_thickness === "string" &&
+    typeof firstSlot.wetsuit_note === "string"
+  );
 }
 
 function uniqueDates(times: string[]): string[] {
@@ -853,6 +942,12 @@ function numericValues(values: string[] | number[] | undefined, indices: number[
 function averageAt(values: string[] | number[] | undefined, indices: number[]): number {
   const numbers = numericValues(values, indices);
   if (!numbers.length) throw new Error("Required hourly values are missing");
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function optionalAverageAt(values: string[] | number[] | undefined, indices: number[]): number | null {
+  const numbers = numericValues(values, indices);
+  if (!numbers.length) return null;
   return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
 }
 
