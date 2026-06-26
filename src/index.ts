@@ -52,7 +52,17 @@ interface TodayWaterFields {
   wetsuit_note: string | null;
 }
 
-type ConditionSlotData = SlotData & TodayWaterFields;
+interface TodayIndexFields {
+  beginner_index: number;
+  longboard_index: number;
+  general_index: number;
+  lesson_index: number;
+  experienced_index: number;
+  midlength_index: number;
+  shortboard_index: number;
+}
+
+type ConditionSlotData = SlotData & TodayWaterFields & TodayIndexFields;
 type TodayWaterSlot = TodayWaterFields & Pick<ForecastSlot, "label" | "time_range">;
 
 interface DisplaySlot {
@@ -84,6 +94,16 @@ interface TodayBestTimes {
   [key: string]: string;
 }
 
+interface ConditionBestTimes {
+  general: string | null;
+  lesson: string | null;
+  beginner: string | null;
+  experienced: string | null;
+  longboard: string | null;
+  midlength: string | null;
+  shortboard: string | null;
+}
+
 interface ConditionData {
   mode: "today_board";
   location: string;
@@ -92,6 +112,14 @@ interface ConditionData {
   date: string;
   generated_at: string;
   updated_at: string;
+  overall_general_index: number;
+  overall_lesson_index: number;
+  overall_beginner_index: number;
+  overall_experienced_index: number;
+  overall_longboard_index: number;
+  overall_midlength_index: number;
+  overall_shortboard_index: number;
+  best_times: ConditionBestTimes;
   water_temp_summary: string | null;
   wetsuit_summary: string | null;
   slots: ConditionSlotData[];
@@ -392,8 +420,10 @@ async function fetchConditions(env: Env): Promise<ConditionData> {
   const forecastDate = String(marine.time[0] ?? weather.time[0] ?? "").slice(0, 10);
   if (!forecastDate) throw new Error("Open-Meteo returned no forecast date");
 
-  const slots = SLOT_DEFINITIONS.map((definition) => withEmptyWaterFields(aggregateSlot(definition, forecastDate, marine, weather)));
+  const slots = SLOT_DEFINITIONS.map((definition) => enrichConditionSlot(aggregateSlot(definition, forecastDate, marine, weather)));
   const updatedAt = formatJapanDateTime();
+  const overall = conditionOverallIndices(slots);
+  const bestTimes = conditionBestTimes(slots);
   const condition: ConditionData = {
     mode: "today_board",
     location: "鵠沼海岸",
@@ -402,21 +432,146 @@ async function fetchConditions(env: Env): Promise<ConditionData> {
     date: `${forecastDate} 00:00`,
     generated_at: updatedAt,
     updated_at: updatedAt,
+    ...overall,
+    best_times: bestTimes,
     water_temp_summary: null,
     wetsuit_summary: null,
     slots,
   };
+  console.log("Today condition index enrichment", {
+    indicesAdded: slots.every(hasConditionIndices),
+    timeRangeNormalized: slots.every((slot) => !slot.time_range.includes("-")),
+    shortboardBestTimeNull: bestTimes.shortboard === null,
+  });
   return enrichTodayConditionWithWater(env, condition, { marine, weather }, forecastDate);
 }
 
-function withEmptyWaterFields(slot: SlotData): ConditionSlotData {
+function enrichConditionSlot(slot: SlotData): ConditionSlotData {
+  const indices = conditionSlotIndices(slot);
   return {
     ...slot,
+    time_range: displayTimeRange(slot.time_range),
+    ...indices,
     water_temp_c: null,
     wetsuit_label: null,
     wetsuit_thickness: null,
     wetsuit_note: null,
   };
+}
+
+function conditionSlotIndices(slot: SlotData): TodayIndexFields {
+  const beginner = asScore(slot.rule_beginner_score, 1);
+  const longboard = asScore(slot.rule_longboard_score, 1);
+  const highCaution = slot.wave_height_m >= 1.1 || slot.wind_speed_ms >= 7 || slot.warnings.length >= 2;
+  const strongOnshore = slot.wind_type === "オンショア" && slot.wind_speed_ms >= 5;
+  const rainy = slot.rain_mm > 1;
+  const weakSmall = slot.wave_height_m < 0.35;
+
+  const lessonPenalty = (slot.wind_speed_ms >= 6 ? 1 : 0) + (rainy ? 1 : 0) + (highCaution ? 1 : 0);
+  const lesson = clampScore(beginner - lessonPenalty);
+
+  const experiencedPenalty = (strongOnshore ? 1 : 0) + (rainy ? 1 : 0) + (highCaution ? 1 : 0);
+  const experienced = clampScore(longboard - experiencedPenalty);
+
+  const midlengthPenalty = weakSmall ? 1 : slot.wave_height_m < 0.5 && slot.swell_period_s < 7 ? 1 : 0;
+  const midlength = clampScore(longboard - midlengthPenalty);
+
+  const shortboard = conditionShortboardScore(slot);
+  const generalPenalty = highCaution || strongOnshore || rainy ? 1 : 0;
+  const general = clampScore(Math.round((lesson * 0.4 + beginner * 0.25 + experienced * 0.35) - generalPenalty * 0.35));
+
+  return {
+    beginner_index: beginner,
+    longboard_index: longboard,
+    general_index: general,
+    lesson_index: lesson,
+    experienced_index: experienced,
+    midlength_index: midlength,
+    shortboard_index: shortboard,
+  };
+}
+
+function conditionShortboardScore(slot: SlotData): number {
+  const size = slot.wave_height_m;
+  const period = slot.swell_period_s;
+  const cleanEnough = !(slot.wind_type === "オンショア" && slot.wind_speed_ms >= 5) && slot.wind_speed_ms <= 5 && slot.rain_mm <= 1;
+  const messy = slot.wind_speed_ms >= 7 || (slot.wind_type === "オンショア" && slot.wind_speed_ms >= 5) || slot.rain_mm > 1 || slot.warnings.length >= 2;
+
+  let score = 1;
+  if (size >= 0.9 && period >= 8 && cleanEnough) score = 5;
+  else if (size >= 0.7 && period >= 7 && cleanEnough) score = 4;
+  else if (size >= 0.55 && period >= 7) score = 3;
+  else if (size >= 0.4 && !messy) score = 2;
+
+  if (messy) score -= 1;
+  if (size < 0.35 || (size < 0.45 && period < 7)) score = Math.min(score, 1);
+  if (score >= 4 && !cleanEnough) score = 3;
+  return clampScore(score);
+}
+
+function conditionOverallIndices(slots: ConditionSlotData[]): Pick<
+  ConditionData,
+  | "overall_general_index"
+  | "overall_lesson_index"
+  | "overall_beginner_index"
+  | "overall_experienced_index"
+  | "overall_longboard_index"
+  | "overall_midlength_index"
+  | "overall_shortboard_index"
+> {
+  return {
+    overall_general_index: bestConditionIndex(slots, "general_index"),
+    overall_lesson_index: bestConditionIndex(slots, "lesson_index"),
+    overall_beginner_index: bestConditionIndex(slots, "beginner_index"),
+    overall_experienced_index: bestConditionIndex(slots, "experienced_index"),
+    overall_longboard_index: bestConditionIndex(slots, "longboard_index"),
+    overall_midlength_index: bestConditionIndex(slots, "midlength_index"),
+    overall_shortboard_index: bestConditionIndex(slots, "shortboard_index"),
+  };
+}
+
+function conditionBestTimes(slots: ConditionSlotData[]): ConditionBestTimes {
+  return {
+    general: bestConditionTime(slots, "general_index", 3),
+    lesson: bestConditionTime(slots, "lesson_index", 3),
+    beginner: bestConditionTime(slots, "beginner_index", 3),
+    experienced: bestConditionTime(slots, "experienced_index", 3),
+    longboard: bestConditionTime(slots, "longboard_index", 3),
+    midlength: bestConditionTime(slots, "midlength_index", 3),
+    shortboard: bestConditionTime(slots, "shortboard_index", 4),
+  };
+}
+
+function bestConditionIndex(slots: ConditionSlotData[], key: keyof TodayIndexFields): number {
+  return Math.max(...slots.map((slot) => slot[key]));
+}
+
+function bestConditionTime(slots: ConditionSlotData[], key: keyof TodayIndexFields, minimumScore: number): string | null {
+  const best = [...slots]
+    .filter((slot) => slot[key] >= minimumScore)
+    .sort((a, b) => {
+      const scoreDiff = b[key] - a[key];
+      if (scoreDiff !== 0) return scoreDiff;
+      return slotDefinitionRank(a.label) - slotDefinitionRank(b.label);
+    })[0];
+  return best?.time_range ?? null;
+}
+
+function hasConditionIndices(slot: ConditionSlotData): boolean {
+  return [
+    slot.general_index,
+    slot.lesson_index,
+    slot.beginner_index,
+    slot.experienced_index,
+    slot.longboard_index,
+    slot.midlength_index,
+    slot.shortboard_index,
+  ].every(Number.isFinite);
+}
+
+function slotDefinitionRank(label: string): number {
+  const index = SLOT_DEFINITIONS.findIndex((definition) => definition.label === label);
+  return index === -1 ? 99 : index;
 }
 
 async function enrichTodayConditionWithWater(
