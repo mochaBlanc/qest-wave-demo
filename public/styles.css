@@ -277,7 +277,7 @@ h1 {
 
 .trend-section {
   grid-column: 1 / -1;
-  padding: 13px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--paper);
@@ -296,29 +296,57 @@ h1 {
   font-weight: 800;
 }
 
-.trend-visual-row {
+.trend-strip-card {
   display: grid;
-  grid-template-columns: 58px 1fr;
-  gap: 10px;
-  align-items: center;
-  padding: 9px 10px;
-  border: 1px solid rgba(24, 49, 60, 0.07);
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(24, 49, 60, 0.08);
   border-radius: 12px;
   background: #fff;
 }
 
-.trend-visual {
-  min-width: 0;
+.trend-time-row,
+.trend-strip-row {
+  display: grid;
+  grid-template-columns: 46px repeat(4, minmax(0, 1fr));
+  align-items: center;
 }
 
-.trend-wave-chart {
+.trend-time-row {
+  min-height: 28px;
+  border-bottom: 1px solid rgba(24, 49, 60, 0.07);
+  background: #fbf8f1;
+}
+
+.trend-time-row strong {
+  color: var(--ocean);
+  font-size: 11px;
+  text-align: center;
+}
+
+.trend-strip-row {
+  min-height: 48px;
+  border-bottom: 1px solid rgba(24, 49, 60, 0.06);
+}
+
+.trend-strip-row:last-child {
+  border-bottom: 0;
+}
+
+.trend-strip-row .trend-label {
+  padding-left: 10px;
+}
+
+.trend-wave-cell {
+  grid-column: span 4;
   display: grid;
-  gap: 5px;
+  gap: 2px;
+  padding: 5px 8px 7px;
 }
 
 .trend-svg {
   width: 100%;
-  height: 54px;
+  height: 28px;
   display: block;
 }
 
@@ -329,7 +357,7 @@ h1 {
 .trend-svg polyline {
   fill: none;
   stroke: var(--ocean);
-  stroke-width: 3;
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -340,34 +368,23 @@ h1 {
   stroke-width: 2;
 }
 
-.trend-values,
-.wind-strip,
-.rain-strip,
-.water-chips {
+.trend-cell-grid {
+  grid-column: span 4;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
 }
 
-.trend-values span,
-.water-chips span {
-  display: grid;
-  gap: 2px;
+.trend-metric {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 800;
   text-align: center;
+  white-space: nowrap;
 }
 
-.trend-values em,
-.water-chips em,
-.wind-chip span,
-.rain-item span {
-  color: var(--muted);
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.trend-values strong,
-.water-chips strong,
 .wind-chip strong,
 .rain-item strong {
   color: var(--navy);
@@ -379,19 +396,19 @@ h1 {
 .rain-item {
   display: grid;
   justify-items: center;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
 .wind-chip i {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   background: var(--ocean-soft);
   color: var(--ocean);
-  font-size: 15px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 900;
 }
@@ -403,20 +420,20 @@ h1 {
 }
 
 .wind-chip.strong i {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   background: #f4ddd4;
   color: #8a4332;
-  font-size: 18px;
+  font-size: 16px;
   transform-origin: center;
 }
 
-.rain-strip {
+.rain-cell-grid {
   align-items: end;
 }
 
 .rain-item i {
-  width: 14px;
+  width: 12px;
   min-height: 6px;
   border-radius: 999px 999px 3px 3px;
   background: #c9dce1;
@@ -427,22 +444,8 @@ h1 {
 }
 
 .rain-item.heavy i {
-  width: 18px;
+  width: 17px;
   background: #557f90;
-}
-
-.water-strip {
-  display: grid;
-  gap: 7px;
-}
-
-.water-strip > strong {
-  justify-self: start;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--sand-soft);
-  color: var(--ocean);
-  font-size: 12px;
 }
 
 .details {

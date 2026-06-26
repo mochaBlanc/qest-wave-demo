@@ -88,7 +88,7 @@ function renderBoard(board) {
   renderWaterNote(board);
   elements.notice.textContent = text(board.notice);
   renderTags();
-  renderTrend(board.trend);
+  renderTrend(board.trend, state.slots);
   renderSlots();
 }
 
@@ -176,82 +176,56 @@ function availableBestTime(slots, key, fallback) {
   return best ? best.time_range : text(fallback);
 }
 
-function renderTrend(trend) {
-  const rows = [
-    waveTrendRow(trend),
-    windTrendRow(trend),
-    rainTrendRow(trend),
-    waterTrendRow(trend),
-  ].filter(Boolean);
-  elements.trendSection.hidden = rows.length === 0;
-  elements.trendGrid.replaceChildren(...rows);
-}
-
-function waveTrendRow(trend) {
+function renderTrend(trend, slots) {
   const labels = trendLabels(trend);
   const values = numericSeries(trend?.wave_height_m, labels.length);
-  if (!hasValues(values)) return null;
-  return visualTrendRow("波サイズ", `
-    <div class="trend-wave-chart" aria-label="波サイズ推移">
-      ${sparklineSvg(values)}
-      <div class="trend-values">
-        ${values.map((value, index) => trendValue(labels[index], formatMeters(value))).join("")}
-      </div>
-    </div>
-  `);
-}
-
-function windTrendRow(trend) {
-  const labels = trendLabels(trend);
   const speeds = numericSeries(trend?.wind_speed_ms, labels.length);
   const directions = numericSeries(trend?.wind_direction_deg, labels.length);
-  if (!hasValues(speeds) && !hasValues(directions)) return null;
-  return visualTrendRow("風", `
-    <div class="wind-strip">
-      ${labels.map((label, index) => windChip(label, speeds[index], directions[index])).join("")}
-    </div>
-  `);
-}
-
-function rainTrendRow(trend) {
-  const labels = trendLabels(trend);
-  const values = numericSeries(trend?.rain_mm, labels.length);
-  if (!hasValues(values)) return null;
-  const max = Math.max(...values.filter((value) => value !== null), 1);
-  return visualTrendRow("雨", `
-    <div class="rain-strip">
-      ${values.map((value, index) => rainBar(labels[index], value, max)).join("")}
-    </div>
-  `);
-}
-
-function waterTrendRow(trend) {
-  const labels = trendLabels(trend);
-  const values = numericSeries(trend?.water_temp_c, labels.length);
-  if (!hasValues(values)) return null;
-  const first = values.find((value) => value !== null);
-  const last = [...values].reverse().find((value) => value !== null);
-  const summary = first !== undefined && last !== undefined
-    ? `${formatTemp(first)} → ${formatTemp(last)}`
-    : "";
-  return visualTrendRow("水温", `
-    <div class="water-strip">
-      <strong>${escapeHtml(summary)}</strong>
-      <div class="water-chips">
-        ${values.map((value, index) => trendValue(labels[index], formatTemp(value))).join("")}
+  const rain = numericSeries(trend?.rain_mm, labels.length);
+  const water = waterTempSeries(trend, slots, labels);
+  const rows = [
+    hasValues(values) ? trendStripRow("波", `
+      <div class="trend-wave-cell">
+        ${sparklineSvg(values)}
+        <div class="trend-cell-grid">${values.map((value) => trendMetric(formatMeters(value))).join("")}</div>
       </div>
+    `) : "",
+    hasValues(speeds) || hasValues(directions) ? trendStripRow("風", `
+      <div class="trend-cell-grid">${labels.map((_, index) => windChip(speeds[index], directions[index])).join("")}</div>
+    `) : "",
+    hasValues(rain) ? trendStripRow("雨", `
+      <div class="trend-cell-grid rain-cell-grid">${rain.map((value) => rainBar(value, rain)).join("")}</div>
+    `) : "",
+    hasValues(water) ? trendStripRow("水温", `
+      <div class="trend-cell-grid">${water.map((value) => trendMetric(formatTemp(value))).join("")}</div>
+    `) : "",
+  ].filter(Boolean);
+
+  elements.trendSection.hidden = rows.length === 0;
+  if (!rows.length) {
+    elements.trendGrid.replaceChildren();
+    return;
+  }
+
+  const card = document.createElement("article");
+  card.className = "trend-strip-card";
+  card.innerHTML = `
+    <div class="trend-time-row">
+      <span></span>
+      ${labels.map((label) => `<strong>${escapeHtml(label)}</strong>`).join("")}
     </div>
-  `);
+    ${rows.join("")}
+  `;
+  elements.trendGrid.replaceChildren(card);
 }
 
-function visualTrendRow(label, bodyHtml) {
-  const section = document.createElement("section");
-  section.className = "trend-visual-row";
-  section.innerHTML = `
-    <p class="trend-label">${escapeHtml(label)}</p>
-    <div class="trend-visual">${bodyHtml}</div>
+function trendStripRow(label, bodyHtml) {
+  return `
+    <div class="trend-strip-row">
+      <p class="trend-label">${escapeHtml(label)}</p>
+      ${bodyHtml}
+    </div>
   `;
-  return section;
 }
 
 function sparklineSvg(values) {
@@ -282,38 +256,32 @@ function sparklineSvg(values) {
   `;
 }
 
-function windChip(label, speed, direction) {
+function windChip(speed, direction) {
   const strongClass = speed !== null && speed >= 7 ? " strong" : speed !== null && speed >= 5 ? " medium" : "";
   const rotation = direction !== null ? ` style="transform: rotate(${direction}deg)"` : "";
   return `
     <div class="wind-chip${strongClass}">
-      <span>${escapeHtml(label)}</span>
       <i${rotation}>↑</i>
       <strong>${escapeHtml(formatSpeed(speed))}</strong>
     </div>
   `;
 }
 
-function rainBar(label, value, max) {
+function rainBar(value, series) {
+  const max = Math.max(...series.filter((item) => item !== null), 1);
   const ratio = value === null ? 0 : Math.max(0.06, Math.min(1, value / max));
-  const height = Math.round(8 + ratio * 38);
+  const height = Math.round(6 + ratio * 34);
   const heavyClass = value !== null && value >= 10 ? " heavy" : value !== null && value >= 1 ? " wet" : "";
   return `
     <div class="rain-item${heavyClass}">
-      <span>${escapeHtml(label)}</span>
       <i style="height: ${height}px"></i>
       <strong>${escapeHtml(formatRain(value))}</strong>
     </div>
   `;
 }
 
-function trendValue(label, value) {
-  return `
-    <span>
-      <em>${escapeHtml(label)}</em>
-      <strong>${escapeHtml(value)}</strong>
-    </span>
-  `;
+function trendMetric(value) {
+  return `<span class="trend-metric">${escapeHtml(value)}</span>`;
 }
 
 function trendLabels(trend) {
@@ -325,13 +293,31 @@ function trendLabels(trend) {
 
 function numericSeries(values, length) {
   return Array.from({ length }, (_, index) => {
-    const value = Number(Array.isArray(values) ? values[index] : null);
+    const raw = Array.isArray(values) ? values[index] : null;
+    if (raw === null || raw === undefined || raw === "") return null;
+    const value = Number(raw);
     return Number.isFinite(value) ? value : null;
   });
 }
 
 function hasValues(values) {
   return values.some((value) => value !== null);
+}
+
+function waterTempSeries(trend, slots, labels) {
+  const trendValues = numericSeries(trend?.water_temp_c, labels.length).map(validWaterTemp);
+  if (hasValues(trendValues)) return trendValues;
+  const slotValues = labels.map((label) => {
+    const slot = Array.isArray(slots) ? slots.find((item) => item.label === label) : null;
+    return validWaterTemp(slot?.water_temp_c);
+  });
+  return hasValues(slotValues) ? slotValues : Array.from({ length: labels.length }, () => null);
+}
+
+function validWaterTemp(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 && number < 40 ? number : null;
 }
 
 function formatMeters(value) {
@@ -344,7 +330,7 @@ function formatSpeed(value) {
 
 function formatRain(value) {
   if (value === null) return "—";
-  return value >= 10 ? `${value.toFixed(0)}mm` : `${value.toFixed(1)}mm`;
+  return `${value.toFixed(1)}mm`;
 }
 
 function formatTemp(value) {
