@@ -42,8 +42,8 @@
             </article>
             <article class="score-card">
               <div class="score-head">
-                <p class="card-label">ロングボード指数</p>
-                <p id="longboard-stars" class="score-value" aria-label="ロングボード指数"></p>
+                <p class="card-label">経験者向け / おすすめ</p>
+                <p id="expert-stars" class="score-value" aria-label="経験者向けおすすめ指数"></p>
               </div>
               <p id="advanced-message" class="score-message"></p>
             </article>
@@ -51,17 +51,26 @@
 
           <section class="best-time-board" aria-label="おすすめ時間">
             <p><span>初心者おすすめ</span><strong id="beginner-best"></strong></p>
-            <p><span>ロングおすすめ</span><strong id="advanced-best"></strong></p>
+            <p><span>経験者おすすめ</span><strong id="advanced-best"></strong></p>
           </section>
         </div>
       </section>
 
       <div id="details" class="details" hidden>
+        <section id="trend-section" class="trend-section" aria-labelledby="trend-title" hidden>
+          <div class="section-heading compact-heading">
+            <p class="section-kicker">TREND</p>
+            <h2 id="trend-title">今日の海況トレンド</h2>
+          </div>
+          <div id="trend-grid" class="trend-grid"></div>
+        </section>
+
         <section aria-labelledby="slots-title">
           <div class="section-heading">
             <p class="section-kicker">時間帯別</p>
             <h2 id="slots-title">コンディション</h2>
           </div>
+          <div id="home-tag-selector" class="tag-selector home-tag-selector" aria-label="表示指数切り替え"></div>
           <div id="slot-grid" class="slot-grid"></div>
         </section>
 
