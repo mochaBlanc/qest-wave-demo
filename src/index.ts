@@ -48,11 +48,30 @@ interface ForecastCondition extends SlotData {
 interface DisplaySlot {
   label: string;
   time_range: string;
+  general_index: number;
+  lesson_index: number;
   beginner_index: number;
+  experienced_index: number;
   longboard_index: number;
+  midlength_index: number;
+  shortboard_index: number;
   status: string;
   message: string;
   caution: string | null;
+  water_temp_c: number | null;
+  wetsuit_label: string | null;
+  wetsuit_thickness: string | null;
+  wetsuit_note: string | null;
+}
+
+interface TodayBestTimes {
+  beginner: string;
+  lesson: string;
+  experienced: string;
+  longboard: string;
+  midlength: string;
+  shortboard: string;
+  [key: string]: string;
 }
 
 interface ConditionData {
@@ -72,15 +91,26 @@ interface TodayBoard {
   brand: string;
   title: string;
   today_summary: string;
+  overall_general_index: number;
+  overall_lesson_index: number;
   overall_beginner_index: number;
+  overall_experienced_index: number;
   overall_longboard_index: number;
+  overall_midlength_index: number;
+  overall_shortboard_index: number;
+  best_times: TodayBestTimes;
   best_beginner_time: string;
   best_advanced_time: string;
   safety_level: string;
   beginner_main_message: string;
+  experienced_main_message: string;
   advanced_main_message: string;
+  board_main_message: string;
+  recommended_board_types: string[];
   slots: DisplaySlot[];
   local_note: string;
+  water_temp_summary: string;
+  wetsuit_summary: string;
   ai_comment_status: string;
   notice: string;
 }
@@ -227,15 +257,33 @@ const FALLBACK_BOARD: TodayBoard = {
   brand: "BIG WAVE",
   title: "鵠沼サーフィン指数",
   today_summary: "早朝は風が弱く、初心者とロングボードの練習に比較的合わせやすい見込みです。",
+  overall_general_index: 4,
+  overall_lesson_index: 4,
   overall_beginner_index: 4,
+  overall_experienced_index: 4,
   overall_longboard_index: 4,
+  overall_midlength_index: 3,
+  overall_shortboard_index: 2,
+  best_times: {
+    beginner: "06:00〜09:00",
+    lesson: "06:00〜09:00",
+    experienced: "06:00〜09:00",
+    longboard: "06:00〜09:00",
+    midlength: "06:00〜09:00",
+    shortboard: "条件次第",
+  },
   best_beginner_time: "06:00〜09:00",
   best_advanced_time: "06:00〜09:00",
   safety_level: "safe",
   beginner_main_message: "風が弱い早朝が、初心者には比較的合わせやすい見込みです。",
+  experienced_main_message: "ロング・ミッドレングス中心に早めの時間帯が狙いやすい見込みです。",
   advanced_main_message: "ロングボード経験者も、早めの時間帯が狙いやすい見込みです。",
+  board_main_message: "ロング・ミッドレングス中心。ショートは条件次第です。",
+  recommended_board_types: ["ロング", "ミッドレングス"],
   slots: FALLBACK_SLOTS.map(displaySlotFromCondition),
   local_note: "江の島寄りは少し穏やかに見える場合があります。",
+  water_temp_summary: "水温データは参考値として確認してください。",
+  wetsuit_summary: "レッスンでは冷え対策のため一段暖かめが安心です。",
   ai_comment_status: "fallback",
   notice:
     "この指数はAIと気象・海況データによる参考情報です。海の状況は急に変わることがあります。実際に海に入るかどうかは、現地の状況を確認して判断してください。",
@@ -802,42 +850,95 @@ async function runDify(apiKey: string, condition: ConditionData): Promise<TodayB
 
   if (!response.ok) throw new Error(`Dify API failed with ${response.status}`);
   const payload = (await response.json()) as DifyResponse;
-  let result = payload.data?.outputs?.result;
-  if (typeof result === "string") {
-    try {
-      result = JSON.parse(result) as unknown;
-    } catch {
-      throw new Error("Dify result was not valid JSON");
-    }
-  }
+  const result = parseDifyResult(payload.data?.outputs?.result);
   if (!isRecord(result)) throw new Error("Dify result was not an object");
+  console.log("Dify today schema", {
+    hasNewTopLevel:
+      "overall_general_index" in result ||
+      "best_times" in result ||
+      "recommended_board_types" in result ||
+      "board_main_message" in result,
+    hasNewSlots: Array.isArray(result.slots) && result.slots.some((slot) => isRecord(slot) && "general_index" in slot),
+  });
   return normalizeBoard(result, condition);
+}
+
+function parseDifyResult(result: unknown): unknown {
+  if (typeof result !== "string") return result;
+  const trimmed = result.trim();
+  const withoutFence = trimmed.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, "$1").trim();
+  try {
+    return JSON.parse(withoutFence) as unknown;
+  } catch {
+    throw new Error("Dify result was not valid JSON");
+  }
 }
 
 function normalizeBoard(result: Record<string, unknown>, condition: ConditionData): TodayBoard {
   const beginnerBest = bestSlot(condition.slots, "rule_beginner_score");
   const longboardBest = bestSlot(condition.slots, "rule_longboard_score");
+  const overallBeginner = asScore(result.overall_beginner_index, beginnerBest.rule_beginner_score);
+  const overallLongboard = asScore(result.overall_longboard_index, longboardBest.rule_longboard_score);
+  const overallGeneral = asScore(result.overall_general_index, averageScore([overallBeginner, overallLongboard]));
+  const overallLesson = asScore(result.overall_lesson_index, overallBeginner);
+  const overallExperienced = asScore(result.overall_experienced_index, overallLongboard);
+  const overallMidlength = asScore(result.overall_midlength_index, conservativeMidlengthScore(overallLongboard));
+  const overallShortboard = asScore(result.overall_shortboard_index, conservativeShortboardScore(overallLongboard, condition.slots));
+  const bestTimes = normalizeBestTimes(result.best_times, {
+    beginner: asString(result.best_beginner_time, displayTimeRange(beginnerBest.time_range)),
+    lesson: asString(result.best_beginner_time, displayTimeRange(beginnerBest.time_range)),
+    experienced: asString(result.best_advanced_time, displayTimeRange(longboardBest.time_range)),
+    longboard: asString(result.best_advanced_time, displayTimeRange(longboardBest.time_range)),
+    midlength: asString(result.best_advanced_time, displayTimeRange(longboardBest.time_range)),
+    shortboard: overallShortboard >= 4 ? displayTimeRange(longboardBest.time_range) : "条件次第",
+  });
+  const experiencedMessage = asString(
+    result.experienced_main_message,
+    asString(
+      result.advanced_main_message,
+      `${longboardBest.label}の${displayTimeRange(longboardBest.time_range)}が経験者には比較的おすすめです。`,
+    ),
+  );
+  const boardMessage = asString(
+    result.board_main_message,
+    overallShortboard >= 4 ? "ショートも候補に入ります。" : "ロング・ミッドレングス中心。ショートは条件次第です。",
+  );
+  const recommendedBoardTypes = normalizeRecommendedBoardTypes(
+    result.recommended_board_types,
+    overallLongboard,
+    overallMidlength,
+    overallShortboard,
+  );
+
   return {
     updated_at: condition.updated_at,
     spot: "鵠沼海岸",
     brand: "BIG WAVE",
     title: "鵠沼サーフィン指数",
     today_summary: asString(result.today_summary, "最新の海況予報を時間帯別に整理しました。"),
-    overall_beginner_index: asScore(result.overall_beginner_index, beginnerBest.rule_beginner_score),
-    overall_longboard_index: asScore(result.overall_longboard_index, longboardBest.rule_longboard_score),
-    best_beginner_time: asString(result.best_beginner_time, displayTimeRange(beginnerBest.time_range)),
-    best_advanced_time: asString(result.best_advanced_time, displayTimeRange(longboardBest.time_range)),
+    overall_general_index: overallGeneral,
+    overall_lesson_index: overallLesson,
+    overall_beginner_index: overallBeginner,
+    overall_experienced_index: overallExperienced,
+    overall_longboard_index: overallLongboard,
+    overall_midlength_index: overallMidlength,
+    overall_shortboard_index: overallShortboard,
+    best_times: bestTimes,
+    best_beginner_time: bestTimes.beginner,
+    best_advanced_time: bestTimes.experienced || bestTimes.longboard,
     safety_level: asString(result.safety_level, inferSafetyStatus(condition.slots)),
     beginner_main_message: asString(
       result.beginner_main_message,
       `${beginnerBest.label}の${displayTimeRange(beginnerBest.time_range)}が初心者には比較的おすすめです。`,
     ),
-    advanced_main_message: asString(
-      result.advanced_main_message,
-      `${longboardBest.label}の${displayTimeRange(longboardBest.time_range)}がロングボード経験者には比較的おすすめです。`,
-    ),
+    experienced_main_message: experiencedMessage,
+    advanced_main_message: experiencedMessage,
+    board_main_message: boardMessage,
+    recommended_board_types: recommendedBoardTypes,
     slots: normalizeDisplaySlots(result.slots, condition.slots),
     local_note: asString(result.local_note, "江の島寄りは少し穏やかに見える場合があります。"),
+    water_temp_summary: asString(result.water_temp_summary, "水温データは参考値として確認してください。"),
+    wetsuit_summary: asString(result.wetsuit_summary, "レッスンでは冷え対策のため一段暖かめが安心です。"),
     ai_comment_status: asString(result.ai_comment_status, "ok"),
     notice: asString(
       result.notice,
@@ -847,21 +948,56 @@ function normalizeBoard(result: Record<string, unknown>, condition: ConditionDat
 }
 
 function normalizeStoredBoard(value: Record<string, unknown>): TodayBoard {
+  const overallBeginner = asScore(value.overall_beginner_index, FALLBACK_BOARD.overall_beginner_index);
+  const overallLongboard = asScore(value.overall_longboard_index, FALLBACK_BOARD.overall_longboard_index);
+  const overallGeneral = asScore(value.overall_general_index, averageScore([overallBeginner, overallLongboard]));
+  const overallLesson = asScore(value.overall_lesson_index, overallBeginner);
+  const overallExperienced = asScore(value.overall_experienced_index, overallLongboard);
+  const overallMidlength = asScore(value.overall_midlength_index, conservativeMidlengthScore(overallLongboard));
+  const overallShortboard = asScore(value.overall_shortboard_index, conservativeShortboardScore(overallLongboard));
+  const bestTimes = normalizeBestTimes(value.best_times, {
+    beginner: asString(value.best_beginner_time, FALLBACK_BOARD.best_beginner_time),
+    lesson: asString(value.best_beginner_time, FALLBACK_BOARD.best_beginner_time),
+    experienced: asString(value.best_advanced_time, FALLBACK_BOARD.best_advanced_time),
+    longboard: asString(value.best_advanced_time, FALLBACK_BOARD.best_advanced_time),
+    midlength: asString(value.best_advanced_time, FALLBACK_BOARD.best_advanced_time),
+    shortboard: overallShortboard >= 4 ? asString(value.best_advanced_time, FALLBACK_BOARD.best_advanced_time) : "条件次第",
+  });
+  const experiencedMessage = asString(
+    value.experienced_main_message,
+    asString(value.advanced_main_message, FALLBACK_BOARD.experienced_main_message),
+  );
   return {
     updated_at: asString(value.updated_at, FALLBACK_BOARD.updated_at),
     spot: "鵠沼海岸",
     brand: "BIG WAVE",
     title: "鵠沼サーフィン指数",
     today_summary: asString(value.today_summary, FALLBACK_BOARD.today_summary),
-    overall_beginner_index: asScore(value.overall_beginner_index, FALLBACK_BOARD.overall_beginner_index),
-    overall_longboard_index: asScore(value.overall_longboard_index, FALLBACK_BOARD.overall_longboard_index),
-    best_beginner_time: asString(value.best_beginner_time, FALLBACK_BOARD.best_beginner_time),
-    best_advanced_time: asString(value.best_advanced_time, FALLBACK_BOARD.best_advanced_time),
+    overall_general_index: overallGeneral,
+    overall_lesson_index: overallLesson,
+    overall_beginner_index: overallBeginner,
+    overall_experienced_index: overallExperienced,
+    overall_longboard_index: overallLongboard,
+    overall_midlength_index: overallMidlength,
+    overall_shortboard_index: overallShortboard,
+    best_times: bestTimes,
+    best_beginner_time: bestTimes.beginner,
+    best_advanced_time: bestTimes.experienced || bestTimes.longboard,
     safety_level: asString(value.safety_level, FALLBACK_BOARD.safety_level),
     beginner_main_message: asString(value.beginner_main_message, FALLBACK_BOARD.beginner_main_message),
-    advanced_main_message: asString(value.advanced_main_message, FALLBACK_BOARD.advanced_main_message),
+    experienced_main_message: experiencedMessage,
+    advanced_main_message: experiencedMessage,
+    board_main_message: asString(value.board_main_message, FALLBACK_BOARD.board_main_message),
+    recommended_board_types: normalizeRecommendedBoardTypes(
+      value.recommended_board_types,
+      overallLongboard,
+      overallMidlength,
+      overallShortboard,
+    ),
     slots: normalizeStoredDisplaySlots(value.slots),
     local_note: asString(value.local_note, FALLBACK_BOARD.local_note),
+    water_temp_summary: asString(value.water_temp_summary, FALLBACK_BOARD.water_temp_summary),
+    wetsuit_summary: asString(value.wetsuit_summary, FALLBACK_BOARD.wetsuit_summary),
     ai_comment_status: asString(value.ai_comment_status, FALLBACK_BOARD.ai_comment_status),
     notice: asString(value.notice, FALLBACK_BOARD.notice),
   };
@@ -872,14 +1008,30 @@ function normalizeDisplaySlots(value: unknown, fallbackSlots: SlotData[]): Displ
   return fallbackSlots.map((fallback, index) => {
     const raw = isRecord(rawSlots[index]) ? rawSlots[index] : {};
     const fallbackDisplay = displaySlotFromCondition(fallback);
+    const beginner = asScore(raw.beginner_index, fallback.rule_beginner_score);
+    const longboard = asScore(raw.longboard_index, fallback.rule_longboard_score);
+    const general = asScore(raw.general_index, averageScore([beginner, longboard]));
+    const lesson = asScore(raw.lesson_index, beginner);
+    const experienced = asScore(raw.experienced_index, longboard);
+    const midlength = asScore(raw.midlength_index, conservativeMidlengthScore(longboard));
+    const shortboard = asScore(raw.shortboard_index, conservativeShortboardScore(longboard, [fallback]));
     return {
       label: asString(raw.label, fallbackDisplay.label),
       time_range: displayTimeRange(asString(raw.time_range, fallbackDisplay.time_range)),
-      beginner_index: asScore(raw.beginner_index, fallbackDisplay.beginner_index),
-      longboard_index: asScore(raw.longboard_index, fallbackDisplay.longboard_index),
+      general_index: general,
+      lesson_index: lesson,
+      beginner_index: beginner,
+      experienced_index: experienced,
+      longboard_index: longboard,
+      midlength_index: midlength,
+      shortboard_index: shortboard,
       status: asString(raw.status, fallbackDisplay.status),
       message: asString(raw.message, fallbackDisplay.message),
       caution: asNullableString(raw.caution, fallbackDisplay.caution),
+      water_temp_c: asNullableNumber(raw.water_temp_c, fallbackDisplay.water_temp_c),
+      wetsuit_label: asNullableString(raw.wetsuit_label, fallbackDisplay.wetsuit_label),
+      wetsuit_thickness: asNullableString(raw.wetsuit_thickness, fallbackDisplay.wetsuit_thickness),
+      wetsuit_note: asNullableString(raw.wetsuit_note, fallbackDisplay.wetsuit_note),
     };
   });
 }
@@ -891,20 +1043,38 @@ function normalizeStoredDisplaySlots(value: unknown): DisplaySlot[] {
     const warnings = Array.isArray(raw.warnings)
       ? raw.warnings.filter((item): item is string => typeof item === "string")
       : [];
+    const beginner = asScore(raw.beginner_index, asScore(raw.rule_beginner_score, fallback.beginner_index));
+    const longboard = asScore(raw.longboard_index, asScore(raw.rule_longboard_score, fallback.longboard_index));
+    const general = asScore(raw.general_index, averageScore([beginner, longboard]));
+    const lesson = asScore(raw.lesson_index, beginner);
+    const experienced = asScore(raw.experienced_index, longboard);
+    const midlength = asScore(raw.midlength_index, conservativeMidlengthScore(longboard));
+    const shortboard = asScore(raw.shortboard_index, conservativeShortboardScore(longboard));
     return {
       label: asString(raw.label, fallback.label),
       time_range: displayTimeRange(asString(raw.time_range, fallback.time_range)),
-      beginner_index: asScore(raw.beginner_index, asScore(raw.rule_beginner_score, fallback.beginner_index)),
-      longboard_index: asScore(raw.longboard_index, asScore(raw.rule_longboard_score, fallback.longboard_index)),
+      general_index: general,
+      lesson_index: lesson,
+      beginner_index: beginner,
+      experienced_index: experienced,
+      longboard_index: longboard,
+      midlength_index: midlength,
+      shortboard_index: shortboard,
       status: asString(raw.status, fallback.status),
       message: asString(raw.message, fallback.message),
       caution: asNullableString(raw.caution, warnings[0] ?? fallback.caution),
+      water_temp_c: asNullableNumber(raw.water_temp_c, fallback.water_temp_c),
+      wetsuit_label: asNullableString(raw.wetsuit_label, fallback.wetsuit_label),
+      wetsuit_thickness: asNullableString(raw.wetsuit_thickness, fallback.wetsuit_thickness),
+      wetsuit_note: asNullableString(raw.wetsuit_note, fallback.wetsuit_note),
     };
   });
 }
 
 function displaySlotFromCondition(slot: SlotData): DisplaySlot {
   const status = slot.rule_beginner_score >= 4 || slot.rule_longboard_score >= 4 ? "おすすめ" : "注意";
+  const beginner = slot.rule_beginner_score;
+  const longboard = slot.rule_longboard_score;
   const message =
     slot.wind_speed_ms <= 4
       ? "風が弱く、面が整いやすい時間帯です。"
@@ -914,11 +1084,20 @@ function displaySlotFromCondition(slot: SlotData): DisplaySlot {
   return {
     label: slot.label,
     time_range: displayTimeRange(slot.time_range),
-    beginner_index: slot.rule_beginner_score,
-    longboard_index: slot.rule_longboard_score,
+    general_index: averageScore([beginner, longboard]),
+    lesson_index: beginner,
+    beginner_index: beginner,
+    experienced_index: longboard,
+    longboard_index: longboard,
+    midlength_index: conservativeMidlengthScore(longboard),
+    shortboard_index: conservativeShortboardScore(longboard, [slot]),
     status,
     message,
     caution: slot.warnings[0] ?? null,
+    water_temp_c: null,
+    wetsuit_label: null,
+    wetsuit_thickness: null,
+    wetsuit_note: null,
   };
 }
 
@@ -1034,6 +1213,58 @@ function bestSlot(slots: SlotData[], key: "rule_beginner_score" | "rule_longboar
   return slots.reduce((best, slot) => (slot[key] > best[key] ? slot : best), slots[0]);
 }
 
+function normalizeBestTimes(value: unknown, fallback: TodayBestTimes): TodayBestTimes {
+  const raw = isRecord(value) ? value : {};
+  const normalized: TodayBestTimes = {
+    beginner: asString(raw.beginner, fallback.beginner),
+    lesson: asString(raw.lesson, fallback.lesson),
+    experienced: asString(raw.experienced, asString(raw.advanced, fallback.experienced)),
+    longboard: asString(raw.longboard, fallback.longboard),
+    midlength: asString(raw.midlength, fallback.midlength),
+    shortboard: asString(raw.shortboard, fallback.shortboard),
+  };
+  for (const [key, time] of Object.entries(raw)) {
+    if (typeof time === "string" && time.trim()) normalized[key] = time;
+  }
+  return normalized;
+}
+
+function normalizeRecommendedBoardTypes(
+  value: unknown,
+  longboardScore: number,
+  midlengthScore: number,
+  shortboardScore: number,
+): string[] {
+  const raw = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+  const allowed = new Set(["ロング", "ミッドレングス", "ショート"]);
+  const sanitized = raw.filter((item) => allowed.has(item) && (item !== "ショート" || shortboardScore >= 4));
+  if (sanitized.length) return [...new Set(sanitized)];
+
+  const fallback: string[] = [];
+  if (longboardScore >= 3) fallback.push("ロング");
+  if (midlengthScore >= 3) fallback.push("ミッドレングス");
+  if (shortboardScore >= 4) fallback.push("ショート");
+  return fallback.length ? fallback : ["ロング", "ミッドレングス"];
+}
+
+function averageScore(scores: number[]): number {
+  const valid = scores.filter(Number.isFinite);
+  if (!valid.length) return 1;
+  return clampScore(Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length));
+}
+
+function conservativeMidlengthScore(longboardScore: number): number {
+  return clampScore(longboardScore >= 4 ? longboardScore - 1 : longboardScore);
+}
+
+function conservativeShortboardScore(longboardScore: number, slots: SlotData[] = []): number {
+  const maxWave = slots.length ? Math.max(...slots.map((slot) => slot.wave_height_m)) : 0;
+  const cap = maxWave >= 0.7 ? 4 : maxWave >= 0.45 ? 3 : 2;
+  return clampScore(Math.min(cap, longboardScore - 1));
+}
+
 function demoSlot(
   label: string,
   timeRange: string,
@@ -1100,6 +1331,12 @@ function asString(value: unknown, fallback: string): string {
 function asNullableString(value: unknown, fallback: string | null): string | null {
   if (value === null) return null;
   return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function asNullableNumber(value: unknown, fallback: number | null): number | null {
+  if (value === null) return null;
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? round(number, 1) : fallback;
 }
 
 function asScore(value: unknown, fallback: number): number {
