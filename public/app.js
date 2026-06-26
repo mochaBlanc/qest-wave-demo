@@ -178,23 +178,20 @@ function availableBestTime(slots, key, fallback) {
 
 function renderTrend(trend, slots) {
   const labels = trendLabels(trend);
-  const values = numericSeries(trend?.wave_height_m, labels.length);
+  const waves = numericSeries(trend?.wave_height_m, labels.length);
   const speeds = numericSeries(trend?.wind_speed_ms, labels.length);
   const directions = numericSeries(trend?.wind_direction_deg, labels.length);
   const rain = numericSeries(trend?.rain_mm, labels.length);
   const water = waterTempSeries(trend, slots, labels);
   const rows = [
-    hasValues(values) ? trendStripRow("波", `
-      <div class="trend-wave-cell">
-        ${sparklineSvg(values)}
-        <div class="trend-cell-grid">${values.map((value) => trendMetric(formatMeters(value))).join("")}</div>
-      </div>
+    hasValues(waves) ? trendStripRow("波", `
+      <div class="trend-cell-grid trend-meter-grid">${waves.map((value) => verticalMeterCell(value, waves, formatMeters, "wave")).join("")}</div>
     `) : "",
     hasValues(speeds) || hasValues(directions) ? trendStripRow("風", `
-      <div class="trend-cell-grid">${labels.map((_, index) => windChip(speeds[index], directions[index])).join("")}</div>
+      <div class="trend-cell-grid">${labels.map((_, index) => windMeterCell(speeds[index], directions[index], speeds)).join("")}</div>
     `) : "",
     hasValues(rain) ? trendStripRow("雨", `
-      <div class="trend-cell-grid rain-cell-grid">${rain.map((value) => rainBar(value, rain)).join("")}</div>
+      <div class="trend-cell-grid trend-meter-grid">${rain.map((value) => verticalMeterCell(value, rain, formatRain, "rain")).join("")}</div>
     `) : "",
     hasValues(water) ? trendStripRow("水温", `
       <div class="trend-cell-grid">${water.map((value) => trendMetric(formatTemp(value))).join("")}</div>
@@ -228,55 +225,24 @@ function trendStripRow(label, bodyHtml) {
   `;
 }
 
-function sparklineSvg(values) {
-  const width = 360;
-  const height = 72;
-  const paddingX = 14;
-  const paddingY = 12;
-  const usableWidth = width - paddingX * 2;
-  const usableHeight = height - paddingY * 2;
-  const numeric = values.filter((value) => value !== null);
-  const min = Math.min(...numeric);
-  const max = Math.max(...numeric);
-  const range = max - min || 1;
-  const points = values.map((value, index) => {
-    const x = paddingX + (usableWidth * index) / Math.max(values.length - 1, 1);
-    const safeValue = value ?? min;
-    const y = paddingY + usableHeight - ((safeValue - min) / range) * usableHeight;
-    return { x, y, missing: value === null };
-  });
-  const linePoints = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-  const areaPoints = `${paddingX},${height - paddingY} ${linePoints} ${width - paddingX},${height - paddingY}`;
+function verticalMeterCell(value, series, formatter, tone) {
+  const height = proportionalPercent(value, series, 12);
   return `
-    <svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-hidden="true" focusable="false">
-      <polygon points="${areaPoints}" />
-      <polyline points="${linePoints}" />
-      ${points.map((point) => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${point.missing ? 2 : 3.5}" />`).join("")}
-    </svg>
+    <span class="meter-cell">
+      <span class="vertical-meter ${tone}"><span class="meter-fill" style="height: ${height}%"></span></span>
+      <strong>${escapeHtml(formatter(value))}</strong>
+    </span>
   `;
 }
 
-function windChip(speed, direction) {
-  const strongClass = speed !== null && speed >= 7 ? " strong" : speed !== null && speed >= 5 ? " medium" : "";
-  const rotation = direction !== null ? ` style="transform: rotate(${direction}deg)"` : "";
+function windMeterCell(speed, direction, series) {
+  const width = proportionalPercent(speed, series, 10);
   return `
-    <div class="wind-chip${strongClass}">
-      <i${rotation}>↑</i>
+    <span class="wind-meter-cell">
+      <span class="horizontal-meter"><span class="meter-fill" style="width: ${width}%"></span></span>
       <strong>${escapeHtml(formatSpeed(speed))}</strong>
-    </div>
-  `;
-}
-
-function rainBar(value, series) {
-  const max = Math.max(...series.filter((item) => item !== null), 1);
-  const ratio = value === null ? 0 : Math.max(0.06, Math.min(1, value / max));
-  const height = Math.round(6 + ratio * 34);
-  const heavyClass = value !== null && value >= 10 ? " heavy" : value !== null && value >= 1 ? " wet" : "";
-  return `
-    <div class="rain-item${heavyClass}">
-      <i style="height: ${height}px"></i>
-      <strong>${escapeHtml(formatRain(value))}</strong>
-    </div>
+      ${direction !== null ? `<em>${escapeHtml(directionLabel(direction))}</em>` : ""}
+    </span>
   `;
 }
 
@@ -302,6 +268,13 @@ function numericSeries(values, length) {
 
 function hasValues(values) {
   return values.some((value) => value !== null);
+}
+
+function proportionalPercent(value, series, minimum) {
+  if (value === null) return 0;
+  const max = Math.max(...series.filter((item) => item !== null), 0);
+  if (max <= 0) return minimum;
+  return Math.max(minimum, Math.min(100, Math.round((value / max) * 100)));
 }
 
 function waterTempSeries(trend, slots, labels) {
@@ -335,6 +308,13 @@ function formatRain(value) {
 
 function formatTemp(value) {
   return value === null ? "—" : `${value.toFixed(1)}℃`;
+}
+
+function directionLabel(degrees) {
+  if (degrees === null) return "";
+  const directions = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"];
+  const index = Math.round((((degrees % 360) + 360) % 360) / 45) % directions.length;
+  return directions[index];
 }
 
 function selectedTab() {
