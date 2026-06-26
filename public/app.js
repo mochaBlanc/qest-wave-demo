@@ -9,6 +9,7 @@ const elements = {
   summary: document.querySelector("#today-summary"),
   beginnerStars: document.querySelector("#beginner-stars"),
   expertStars: document.querySelector("#expert-stars"),
+  recommendedTypes: document.querySelector("#recommended-types"),
   beginnerMessage: document.querySelector("#beginner-message"),
   advancedMessage: document.querySelector("#advanced-message"),
   beginnerBest: document.querySelector("#beginner-best"),
@@ -18,15 +19,18 @@ const elements = {
   tagSelector: document.querySelector("#home-tag-selector"),
   slots: document.querySelector("#slot-grid"),
   localNote: document.querySelector("#local-note"),
+  waterNoteCard: document.querySelector("#water-note-card"),
+  waterNoteSummary: document.querySelector("#water-note-summary"),
+  wetsuitNoteSummary: document.querySelector("#wetsuit-note-summary"),
   notice: document.querySelector("#notice"),
 };
 
 const metricTabGroups = [
   [
-    { label: "総合", key: "general_wave_index" },
+    { label: "総合", key: "general_index" },
     { label: "レッスン", key: "lesson_index" },
     { label: "初心者", key: "beginner_index" },
-    { label: "経験者", key: "advanced_index" },
+    { label: "経験者", key: "experienced_index" },
   ],
   [
     { label: "ロング", key: "longboard_index" },
@@ -40,7 +44,7 @@ const metricTabs = metricTabGroups.flat();
 const state = {
   board: null,
   slots: [],
-  selectedMetric: "general_wave_index",
+  selectedMetric: "general_index",
 };
 
 async function loadBoard() {
@@ -52,14 +56,7 @@ async function loadBoard() {
   try {
     const response = await fetch("/api/today", { headers: { Accept: "application/json" }, cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const [board, forecast] = await Promise.all([
-      response.json(),
-      fetchTodayForecast().catch((error) => {
-        console.warn("Forecast supplement unavailable", error);
-        return null;
-      }),
-    ]);
-    renderBoard(board, forecast);
+    renderBoard(await response.json());
     elements.status.hidden = true;
     elements.content.hidden = false;
     elements.details.hidden = false;
@@ -72,30 +69,26 @@ async function loadBoard() {
   }
 }
 
-async function fetchTodayForecast() {
-  const response = await fetch("/api/forecast", { headers: { Accept: "application/json" }, cache: "no-store" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
-
-function renderBoard(board, forecast) {
+function renderBoard(board) {
   state.board = board;
-  state.slots = mergeTodaySlots(board, forecast);
+  state.slots = Array.isArray(board.slots) ? board.slots : [];
   elements.brand.textContent = text(board.brand);
   elements.title.textContent = text(board.title);
   elements.updated.textContent = `更新（JST）：${text(board.updated_at)}`;
   elements.summary.textContent = text(board.today_summary);
   elements.beginnerStars.innerHTML = stars(board.overall_beginner_index);
-  const expert = expertRecommendation(state.slots, board);
+  const expert = expertRecommendation(board);
   elements.expertStars.innerHTML = stars(expert.score);
+  renderRecommendedTypes(expert.types);
   elements.beginnerMessage.textContent = text(board.beginner_main_message);
   elements.advancedMessage.textContent = expert.message;
   elements.beginnerBest.textContent = availableBestTime(state.slots, "beginner_index", board.best_beginner_time);
-  elements.advancedBest.textContent = availableBestTime(state.slots, "advanced_index", board.best_advanced_time);
+  elements.advancedBest.textContent = availableBestTime(state.slots, "experienced_index", board.best_advanced_time);
   elements.localNote.textContent = text(board.local_note);
+  renderWaterNote(board);
   elements.notice.textContent = text(board.notice);
   renderTags();
-  renderTrend(state.slots);
+  renderTrend(board.trend);
   renderSlots();
 }
 
@@ -134,7 +127,7 @@ function slotCard(slot) {
       <span class="status-chip">${escapeHtml(ended ? "終了" : slot.status)}</span>
     </header>
     <div class="slot-selected-score">
-      <span>表示指数：${escapeHtml(tab.label)}</span>
+      <span>${escapeHtml(metricGuideLabel(tab.label))}</span>
       <strong>${plainStars(scoreForSlot(slot, tab.key))}</strong>
     </div>
     <p class="slot-message">${escapeHtml(slot.message)}</p>
@@ -143,51 +136,33 @@ function slotCard(slot) {
   return article;
 }
 
-function mergeTodaySlots(board, forecast) {
-  const slots = Array.isArray(board.slots) ? board.slots : [];
-  const forecastSlots = forecastSlotsForToday(forecast);
-  return slots.map((slot) => {
-    const forecastSlot = forecastSlots.find((candidate) => candidate.label === slot.label);
-    return forecastSlot ? { ...slot, ...forecastSlot, status: slot.status, message: slot.message, caution: slot.caution } : slot;
-  });
-}
-
-function forecastSlotsForToday(forecast) {
-  const today = currentJstDate();
-  const day = Array.isArray(forecast?.days) ? forecast.days.find((candidate) => candidate.date === today) : null;
-  const spot = Array.isArray(day?.spots)
-    ? day.spots.find((candidate) => candidate.spot_id === "kugenuma_main") ?? day.spots[0]
-    : null;
-  return Array.isArray(spot?.slots) ? spot.slots : [];
-}
-
-function expertRecommendation(slots, board) {
-  const averages = {
-    ロング: averageScore(slots, "longboard_index") || scoreValue(board.overall_longboard_index),
-    ミッドレングス: averageScore(slots, "midlength_index") || scoreValue(board.overall_longboard_index),
-    ショート: averageScore(slots, "shortboard_index") || conservativeShortboardScore(board.overall_longboard_index),
-  };
-  const best = Object.entries(averages).sort((a, b) => b[1] - a[1])[0] ?? ["ロング", 3];
-
-  if (!slots.some((slot) => Number.isFinite(Number(slot.midlength_index)) || Number.isFinite(Number(slot.shortboard_index)))) {
-    return {
-      score: scoreValue(board.overall_longboard_index),
-      message: "ロング・ミッドレングス中心。ショートは条件次第で、現地の波の力を確認してください。",
-    };
-  }
-
-  const short = averages.ショート;
-  const suffix = short >= 4 ? "ショートも候補に入ります。" : "ショートは波の力が足りる時間帯を選ぶのが安心です。";
+function expertRecommendation(board) {
+  const types = Array.isArray(board.recommended_board_types)
+    ? board.recommended_board_types.filter((type) => typeof type === "string")
+    : [];
   return {
-    score: scoreValue(best[1]),
-    message: `${best[0]}が今日の第一候補です。${suffix}`,
+    score: scoreValue(board.overall_experienced_index ?? board.overall_longboard_index),
+    types: types.length ? types : ["ロング", "ミッドレングス"],
+    message: text(board.board_main_message || board.experienced_main_message || board.advanced_main_message),
   };
 }
 
-function averageScore(slots, key) {
-  const scores = slots.map((slot) => Number(slot[key])).filter(Number.isFinite);
-  if (!scores.length) return null;
-  return scores.reduce((sum, value) => sum + value, 0) / scores.length;
+function renderRecommendedTypes(types) {
+  elements.recommendedTypes.replaceChildren(...types.map((type) => {
+    const chip = document.createElement("span");
+    chip.textContent = type;
+    return chip;
+  }));
+}
+
+function renderWaterNote(board) {
+  const water = typeof board.water_temp_summary === "string" && board.water_temp_summary.trim() ? board.water_temp_summary : "";
+  const wetsuit = typeof board.wetsuit_summary === "string" && board.wetsuit_summary.trim() ? board.wetsuit_summary : "";
+  elements.waterNoteCard.hidden = !water && !wetsuit;
+  elements.waterNoteSummary.hidden = !water;
+  elements.wetsuitNoteSummary.hidden = !wetsuit;
+  elements.waterNoteSummary.textContent = water;
+  elements.wetsuitNoteSummary.textContent = wetsuit;
 }
 
 function availableBestTime(slots, key, fallback) {
@@ -201,61 +176,179 @@ function availableBestTime(slots, key, fallback) {
   return best ? best.time_range : text(fallback);
 }
 
-function renderTrend(slots) {
-  const rows = trendRows(slots);
-  elements.trendSection.hidden = rows.length === 0;
-  elements.trendGrid.replaceChildren(...rows.map(trendRow));
-}
-
-function trendRows(slots) {
-  if (!slots.length) return [];
+function renderTrend(trend) {
   const rows = [
-    {
-      label: "波サイズ",
-      points: slots.map((slot) => {
-        const score = scoreForSlot(slot, "general_wave_index");
-        return { label: slot.label, value: waveTrendLabel(score), level: score };
-      }),
-    },
-    {
-      label: "風",
-      points: slots.map((slot) => {
-        const level = windTrendLevel(slot);
-        return { label: slot.label, value: windTrendLabel(level), level };
-      }),
-    },
-  ];
-  if (slots.some((slot) => Number.isFinite(Number(slot.water_temp_c)))) {
-    rows.push({
-      label: "水温",
-      points: slots.map((slot) => {
-        const water = Number(slot.water_temp_c);
-        return {
-          label: slot.label,
-          value: Number.isFinite(water) ? `${water.toFixed(1)}℃` : "—",
-          level: water >= 24 ? 5 : water >= 21 ? 4 : water >= 18 ? 3 : water >= 15 ? 2 : 1,
-        };
-      }),
-    });
-  }
-  return rows;
+    waveTrendRow(trend),
+    windTrendRow(trend),
+    rainTrendRow(trend),
+    waterTrendRow(trend),
+  ].filter(Boolean);
+  elements.trendSection.hidden = rows.length === 0;
+  elements.trendGrid.replaceChildren(...rows);
 }
 
-function trendRow(row) {
-  const section = document.createElement("section");
-  section.className = "trend-row";
-  section.innerHTML = `
-    <p class="trend-label">${escapeHtml(row.label)}</p>
-    <div class="trend-points">
-      ${row.points.map((point) => `
-        <div class="trend-point trend-${scoreValue(point.level)}">
-          <span>${escapeHtml(point.label)}</span>
-          <strong>${escapeHtml(point.value)}</strong>
-        </div>
-      `).join("")}
+function waveTrendRow(trend) {
+  const labels = trendLabels(trend);
+  const values = numericSeries(trend?.wave_height_m, labels.length);
+  if (!hasValues(values)) return null;
+  return visualTrendRow("波サイズ", `
+    <div class="trend-wave-chart" aria-label="波サイズ推移">
+      ${sparklineSvg(values)}
+      <div class="trend-values">
+        ${values.map((value, index) => trendValue(labels[index], formatMeters(value))).join("")}
+      </div>
     </div>
+  `);
+}
+
+function windTrendRow(trend) {
+  const labels = trendLabels(trend);
+  const speeds = numericSeries(trend?.wind_speed_ms, labels.length);
+  const directions = numericSeries(trend?.wind_direction_deg, labels.length);
+  if (!hasValues(speeds) && !hasValues(directions)) return null;
+  return visualTrendRow("風", `
+    <div class="wind-strip">
+      ${labels.map((label, index) => windChip(label, speeds[index], directions[index])).join("")}
+    </div>
+  `);
+}
+
+function rainTrendRow(trend) {
+  const labels = trendLabels(trend);
+  const values = numericSeries(trend?.rain_mm, labels.length);
+  if (!hasValues(values)) return null;
+  const max = Math.max(...values.filter((value) => value !== null), 1);
+  return visualTrendRow("雨", `
+    <div class="rain-strip">
+      ${values.map((value, index) => rainBar(labels[index], value, max)).join("")}
+    </div>
+  `);
+}
+
+function waterTrendRow(trend) {
+  const labels = trendLabels(trend);
+  const values = numericSeries(trend?.water_temp_c, labels.length);
+  if (!hasValues(values)) return null;
+  const first = values.find((value) => value !== null);
+  const last = [...values].reverse().find((value) => value !== null);
+  const summary = first !== undefined && last !== undefined
+    ? `${formatTemp(first)} → ${formatTemp(last)}`
+    : "";
+  return visualTrendRow("水温", `
+    <div class="water-strip">
+      <strong>${escapeHtml(summary)}</strong>
+      <div class="water-chips">
+        ${values.map((value, index) => trendValue(labels[index], formatTemp(value))).join("")}
+      </div>
+    </div>
+  `);
+}
+
+function visualTrendRow(label, bodyHtml) {
+  const section = document.createElement("section");
+  section.className = "trend-visual-row";
+  section.innerHTML = `
+    <p class="trend-label">${escapeHtml(label)}</p>
+    <div class="trend-visual">${bodyHtml}</div>
   `;
   return section;
+}
+
+function sparklineSvg(values) {
+  const width = 360;
+  const height = 72;
+  const paddingX = 14;
+  const paddingY = 12;
+  const usableWidth = width - paddingX * 2;
+  const usableHeight = height - paddingY * 2;
+  const numeric = values.filter((value) => value !== null);
+  const min = Math.min(...numeric);
+  const max = Math.max(...numeric);
+  const range = max - min || 1;
+  const points = values.map((value, index) => {
+    const x = paddingX + (usableWidth * index) / Math.max(values.length - 1, 1);
+    const safeValue = value ?? min;
+    const y = paddingY + usableHeight - ((safeValue - min) / range) * usableHeight;
+    return { x, y, missing: value === null };
+  });
+  const linePoints = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const areaPoints = `${paddingX},${height - paddingY} ${linePoints} ${width - paddingX},${height - paddingY}`;
+  return `
+    <svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-hidden="true" focusable="false">
+      <polygon points="${areaPoints}" />
+      <polyline points="${linePoints}" />
+      ${points.map((point) => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${point.missing ? 2 : 3.5}" />`).join("")}
+    </svg>
+  `;
+}
+
+function windChip(label, speed, direction) {
+  const strongClass = speed !== null && speed >= 7 ? " strong" : speed !== null && speed >= 5 ? " medium" : "";
+  const rotation = direction !== null ? ` style="transform: rotate(${direction}deg)"` : "";
+  return `
+    <div class="wind-chip${strongClass}">
+      <span>${escapeHtml(label)}</span>
+      <i${rotation}>↑</i>
+      <strong>${escapeHtml(formatSpeed(speed))}</strong>
+    </div>
+  `;
+}
+
+function rainBar(label, value, max) {
+  const ratio = value === null ? 0 : Math.max(0.06, Math.min(1, value / max));
+  const height = Math.round(8 + ratio * 38);
+  const heavyClass = value !== null && value >= 10 ? " heavy" : value !== null && value >= 1 ? " wet" : "";
+  return `
+    <div class="rain-item${heavyClass}">
+      <span>${escapeHtml(label)}</span>
+      <i style="height: ${height}px"></i>
+      <strong>${escapeHtml(formatRain(value))}</strong>
+    </div>
+  `;
+}
+
+function trendValue(label, value) {
+  return `
+    <span>
+      <em>${escapeHtml(label)}</em>
+      <strong>${escapeHtml(value)}</strong>
+    </span>
+  `;
+}
+
+function trendLabels(trend) {
+  const labels = Array.isArray(trend?.labels) && trend.labels.length
+    ? trend.labels
+    : ["早朝", "午前", "午後", "夕方"];
+  return labels.slice(0, 4).map((label) => text(label));
+}
+
+function numericSeries(values, length) {
+  return Array.from({ length }, (_, index) => {
+    const value = Number(Array.isArray(values) ? values[index] : null);
+    return Number.isFinite(value) ? value : null;
+  });
+}
+
+function hasValues(values) {
+  return values.some((value) => value !== null);
+}
+
+function formatMeters(value) {
+  return value === null ? "—" : `${value.toFixed(1)}m`;
+}
+
+function formatSpeed(value) {
+  return value === null ? "—" : `${value.toFixed(1)}m/s`;
+}
+
+function formatRain(value) {
+  if (value === null) return "—";
+  return value >= 10 ? `${value.toFixed(0)}mm` : `${value.toFixed(1)}mm`;
+}
+
+function formatTemp(value) {
+  return value === null ? "—" : `${value.toFixed(1)}℃`;
 }
 
 function selectedTab() {
@@ -269,7 +362,7 @@ function scoreForSlot(slot, key) {
   const beginner = scoreValue(slot?.beginner_index);
   const longboard = scoreValue(slot?.longboard_index);
   if (key === "beginner_index" || key === "lesson_index") return beginner;
-  if (key === "longboard_index" || key === "advanced_index" || key === "midlength_index") return longboard;
+  if (key === "longboard_index" || key === "advanced_index" || key === "experienced_index" || key === "midlength_index") return longboard;
   if (key === "shortboard_index") return conservativeShortboardScore(longboard);
   return scoreValue((beginner + longboard) / 2);
 }
@@ -278,26 +371,8 @@ function conservativeShortboardScore(value) {
   return Math.max(1, Math.min(3, scoreValue(value) - 1));
 }
 
-function waveTrendLabel(score) {
-  if (score >= 5) return "良い";
-  if (score >= 4) return "ほどよい";
-  if (score >= 3) return "普通";
-  if (score >= 2) return "弱め";
-  return "慎重";
-}
-
-function windTrendLevel(slot) {
-  const status = `${slot.status ?? ""} ${slot.caution ?? ""}`;
-  if (status.includes("非推奨")) return 1;
-  if (status.includes("慎重") || status.includes("風") || status.includes("オンショア")) return 2;
-  if (status.includes("おすすめ")) return 5;
-  return 3;
-}
-
-function windTrendLabel(level) {
-  if (level >= 5) return "穏やか";
-  if (level >= 3) return "普通";
-  return "注意";
+function metricGuideLabel(label) {
+  return `${label}目安`;
 }
 
 function stars(value) {

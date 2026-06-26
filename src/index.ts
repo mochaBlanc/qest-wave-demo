@@ -104,6 +104,16 @@ interface ConditionBestTimes {
   shortboard: string | null;
 }
 
+interface TodayTrend {
+  labels: string[];
+  time_ranges: string[];
+  wave_height_m?: Array<number | null>;
+  wind_speed_ms?: Array<number | null>;
+  wind_direction_deg?: Array<number | null>;
+  rain_mm?: Array<number | null>;
+  water_temp_c?: Array<number | null>;
+}
+
 interface ConditionData {
   mode: "today_board";
   location: string;
@@ -122,6 +132,7 @@ interface ConditionData {
   best_times: ConditionBestTimes;
   water_temp_summary: string | null;
   wetsuit_summary: string | null;
+  trend: TodayTrend;
   slots: ConditionSlotData[];
 }
 
@@ -147,6 +158,7 @@ interface TodayBoard {
   advanced_main_message: string;
   board_main_message: string;
   recommended_board_types: string[];
+  trend: TodayTrend;
   slots: DisplaySlot[];
   local_note: string;
   water_temp_summary: string | null;
@@ -320,6 +332,7 @@ const FALLBACK_BOARD: TodayBoard = {
   advanced_main_message: "ロングボード経験者も、早めの時間帯が狙いやすい見込みです。",
   board_main_message: "ロング・ミッドレングス中心。ショートは条件次第です。",
   recommended_board_types: ["ロング", "ミッドレングス"],
+  trend: buildTodayTrend(FALLBACK_SLOTS.map(enrichConditionSlot)),
   slots: FALLBACK_SLOTS.map(displaySlotFromCondition),
   local_note: "江の島寄りは少し穏やかに見える場合があります。",
   water_temp_summary: null,
@@ -436,6 +449,7 @@ async function fetchConditions(env: Env): Promise<ConditionData> {
     best_times: bestTimes,
     water_temp_summary: null,
     wetsuit_summary: null,
+    trend: buildTodayTrend(slots),
     slots,
   };
   console.log("Today condition index enrichment", {
@@ -681,6 +695,7 @@ function applyWaterFieldsToCondition(
       ...condition,
       water_temp_summary: waterTempSummary(slots),
       wetsuit_summary: wetsuitSummary(slots),
+      trend: buildTodayTrend(slots, true),
       slots,
     },
     enrichedCount,
@@ -714,6 +729,30 @@ function wetsuitSummary(slots: ConditionSlotData[]): string | null {
   const label = labels.length === 1 ? labels[0] : labels.join(" / ");
   const thickness = thicknesses.length === 1 ? thicknesses[0] : thicknesses.join(" / ");
   return `${label}（${thickness}）を目安にしてください。`;
+}
+
+function buildTodayTrend(slots: Array<SlotData & Partial<TodayWaterFields>>, logDiagnostics = false): TodayTrend {
+  const ordered = SLOT_DEFINITIONS.map((definition) =>
+    slots.find((slot) => slot.label === definition.label || displayTimeRange(slot.time_range) === displayTimeRange(definition.time_range)),
+  );
+  const trend: TodayTrend = {
+    labels: SLOT_DEFINITIONS.map((definition) => definition.label),
+    time_ranges: SLOT_DEFINITIONS.map((definition) => displayTimeRange(definition.time_range)),
+    wave_height_m: ordered.map((slot) => optionalRounded(slot?.wave_height_m, 2)),
+    wind_speed_ms: ordered.map((slot) => optionalRounded(slot?.wind_speed_ms, 1)),
+    wind_direction_deg: ordered.map((slot) => optionalRounded(slot?.wind_direction_deg, 0)),
+    rain_mm: ordered.map((slot) => optionalRounded(slot?.rain_mm, 1)),
+  };
+  const water = ordered.map((slot) => optionalRounded(slot?.water_temp_c, 1));
+  if (water.some((value) => value !== null)) trend.water_temp_c = water;
+  if (logDiagnostics) {
+    console.log("Today trend built", {
+      built: true,
+      points: trend.labels.length,
+      hasWaterTemp: Boolean(trend.water_temp_c),
+    });
+  }
+  return trend;
 }
 
 async function fetchRawForecastData(forecastDays: number): Promise<RawForecastData> {
@@ -1256,6 +1295,7 @@ function normalizeBoard(result: Record<string, unknown>, condition: ConditionDat
     advanced_main_message: experiencedMessage,
     board_main_message: boardMessage,
     recommended_board_types: recommendedBoardTypes,
+    trend: condition.trend,
     slots: normalizeDisplaySlots(result.slots, condition.slots),
     local_note: asString(result.local_note, "江の島寄りは少し穏やかに見える場合があります。"),
     water_temp_summary: asOptionalString(result.water_temp_summary, condition.water_temp_summary),
@@ -1315,6 +1355,7 @@ function normalizeStoredBoard(value: Record<string, unknown>): TodayBoard {
       overallMidlength,
       overallShortboard,
     ),
+    trend: normalizeStoredTrend(value.trend, FALLBACK_BOARD.trend),
     slots: normalizeStoredDisplaySlots(value.slots),
     local_note: asString(value.local_note, FALLBACK_BOARD.local_note),
     water_temp_summary: asNullableString(value.water_temp_summary, FALLBACK_BOARD.water_temp_summary),
@@ -1390,6 +1431,28 @@ function normalizeStoredDisplaySlots(value: unknown): DisplaySlot[] {
       wetsuit_note: asNullableString(raw.wetsuit_note, fallback.wetsuit_note),
     };
   });
+}
+
+function normalizeStoredTrend(value: unknown, fallback: TodayTrend): TodayTrend {
+  const raw = isRecord(value) ? value : {};
+  const labels = normalizeStringArray(raw.labels, fallback.labels);
+  const timeRanges = normalizeStringArray(raw.time_ranges, fallback.time_ranges).map(displayTimeRange);
+  const trend: TodayTrend = {
+    labels: labels.length ? labels : fallback.labels,
+    time_ranges: timeRanges.length ? timeRanges : fallback.time_ranges,
+  };
+  const length = trend.labels.length;
+  const wave = normalizeNumberArray(raw.wave_height_m, fallback.wave_height_m, length, 2);
+  const wind = normalizeNumberArray(raw.wind_speed_ms, fallback.wind_speed_ms, length, 1);
+  const windDirection = normalizeNumberArray(raw.wind_direction_deg, fallback.wind_direction_deg, length, 0);
+  const rain = normalizeNumberArray(raw.rain_mm, fallback.rain_mm, length, 1);
+  const water = normalizeNumberArray(raw.water_temp_c, fallback.water_temp_c, length, 1);
+  if (wave) trend.wave_height_m = wave;
+  if (wind) trend.wind_speed_ms = wind;
+  if (windDirection) trend.wind_direction_deg = windDirection;
+  if (rain) trend.rain_mm = rain;
+  if (water?.some((item) => item !== null)) trend.water_temp_c = water;
+  return trend;
 }
 
 function displaySlotFromCondition(slot: SlotData & Partial<TodayWaterFields>): DisplaySlot {
@@ -1676,6 +1739,27 @@ function asOptionalNumber(value: unknown, fallback: number | null): number | nul
 function asScore(value: unknown, fallback: number): number {
   const score = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(score) ? clampScore(Math.round(score)) : fallback;
+}
+
+function optionalRounded(value: unknown, digits: number): number | null {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? round(number, digits) : null;
+}
+
+function normalizeStringArray(value: unknown, fallback: string[]): string[] {
+  const raw = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return raw.length ? raw : fallback;
+}
+
+function normalizeNumberArray(
+  value: unknown,
+  fallback: Array<number | null> | undefined,
+  length: number,
+  digits: number,
+): Array<number | null> | undefined {
+  const source = Array.isArray(value) ? value : fallback;
+  if (!Array.isArray(source)) return undefined;
+  return Array.from({ length }, (_, index) => optionalRounded(source[index], digits));
 }
 
 function displayTimeRange(timeRange: string): string {

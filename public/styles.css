@@ -25,6 +25,21 @@ body {
 
 button { font: inherit; }
 
+[hidden] {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .page-shell {
   width: min(100% - 24px, 980px);
   margin: 0 auto;
@@ -213,6 +228,23 @@ h1 {
   line-height: 1.62;
 }
 
+.board-type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.board-type-list span {
+  padding: 4px 8px;
+  border: 1px solid rgba(37, 111, 134, 0.18);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ocean);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .best-time-board {
   display: grid;
   gap: 1px;
@@ -254,12 +286,7 @@ h1 {
 
 .trend-grid {
   display: grid;
-  gap: 9px;
-}
-
-.trend-row {
-  display: grid;
-  gap: 7px;
+  gap: 10px;
 }
 
 .trend-label {
@@ -269,43 +296,154 @@ h1 {
   font-weight: 800;
 }
 
-.trend-points {
+.trend-visual-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(58px, 1fr));
-  gap: 6px;
-}
-
-.trend-point {
-  min-height: 48px;
-  padding: 7px 6px;
-  border: 1px solid rgba(24, 49, 60, 0.08);
-  border-radius: 10px;
+  grid-template-columns: 58px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid rgba(24, 49, 60, 0.07);
+  border-radius: 12px;
   background: #fff;
-  text-align: center;
 }
 
-.trend-point span,
-.trend-point strong {
+.trend-visual {
+  min-width: 0;
+}
+
+.trend-wave-chart {
+  display: grid;
+  gap: 5px;
+}
+
+.trend-svg {
+  width: 100%;
+  height: 54px;
   display: block;
 }
 
-.trend-point span {
+.trend-svg polygon {
+  fill: rgba(37, 111, 134, 0.11);
+}
+
+.trend-svg polyline {
+  fill: none;
+  stroke: var(--ocean);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-svg circle {
+  fill: var(--paper);
+  stroke: var(--ocean);
+  stroke-width: 2;
+}
+
+.trend-values,
+.wind-strip,
+.rain-strip,
+.water-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.trend-values span,
+.water-chips span {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+
+.trend-values em,
+.water-chips em,
+.wind-chip span,
+.rain-item span {
   color: var(--muted);
   font-size: 10px;
+  font-style: normal;
   font-weight: 700;
 }
 
-.trend-point strong {
-  margin-top: 4px;
+.trend-values strong,
+.water-chips strong,
+.wind-chip strong,
+.rain-item strong {
   color: var(--navy);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 800;
 }
 
-.trend-5 { background: #d9f0f0; }
-.trend-4 { background: #e6f2f4; }
-.trend-3 { background: #fbf1d8; }
-.trend-2 { background: #f9dfba; }
-.trend-1 { background: #eadbd7; }
+.wind-chip,
+.rain-item {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wind-chip i {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--ocean-soft);
+  color: var(--ocean);
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.wind-chip.medium i {
+  background: #fbf1d8;
+  color: #93601f;
+  transform-origin: center;
+}
+
+.wind-chip.strong i {
+  width: 30px;
+  height: 30px;
+  background: #f4ddd4;
+  color: #8a4332;
+  font-size: 18px;
+  transform-origin: center;
+}
+
+.rain-strip {
+  align-items: end;
+}
+
+.rain-item i {
+  width: 14px;
+  min-height: 6px;
+  border-radius: 999px 999px 3px 3px;
+  background: #c9dce1;
+}
+
+.rain-item.wet i {
+  background: #8db7c5;
+}
+
+.rain-item.heavy i {
+  width: 18px;
+  background: #557f90;
+}
+
+.water-strip {
+  display: grid;
+  gap: 7px;
+}
+
+.water-strip > strong {
+  justify-self: start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--sand-soft);
+  color: var(--ocean);
+  font-size: 12px;
+}
 
 .details {
   display: grid;
@@ -457,11 +595,16 @@ h2 {
   color: var(--ocean);
 }
 
-.local-note p:last-child {
+.local-note p:not(.info-label) {
   margin: 0;
   color: var(--navy);
   font-size: 13px;
   line-height: 1.65;
+}
+
+.water-note-card {
+  display: grid;
+  gap: 7px;
 }
 
 .notice {

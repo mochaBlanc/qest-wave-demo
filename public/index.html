@@ -42,9 +42,10 @@
             </article>
             <article class="score-card">
               <div class="score-head">
-                <p class="card-label">経験者向け / おすすめ</p>
+                <p class="card-label">おすすめ板種</p>
                 <p id="expert-stars" class="score-value" aria-label="経験者向けおすすめ指数"></p>
               </div>
+              <div id="recommended-types" class="board-type-list"></div>
               <p id="advanced-message" class="score-message"></p>
             </article>
           </section>
@@ -60,7 +61,7 @@
         <section id="trend-section" class="trend-section" aria-labelledby="trend-title" hidden>
           <div class="section-heading compact-heading">
             <p class="section-kicker">TREND</p>
-            <h2 id="trend-title">今日の海況トレンド</h2>
+            <h2 id="trend-title" class="sr-only">今日の海況トレンド</h2>
           </div>
           <div id="trend-grid" class="trend-grid"></div>
         </section>
@@ -68,7 +69,7 @@
         <section aria-labelledby="slots-title">
           <div class="section-heading">
             <p class="section-kicker">時間帯別</p>
-            <h2 id="slots-title">コンディション</h2>
+            <h2 id="slots-title" class="sr-only">コンディション</h2>
           </div>
           <div id="home-tag-selector" class="tag-selector home-tag-selector" aria-label="表示指数切り替え"></div>
           <div id="slot-grid" class="slot-grid"></div>
@@ -77,6 +78,12 @@
         <aside class="local-note">
           <p class="info-label">鵠沼ローカルメモ</p>
           <p id="local-note"></p>
+        </aside>
+
+        <aside id="water-note-card" class="local-note water-note-card" hidden>
+          <p class="info-label">水温・ウェット目安</p>
+          <p id="water-note-summary"></p>
+          <p id="wetsuit-note-summary"></p>
         </aside>
 
         <footer class="notice">
