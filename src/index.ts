@@ -45,6 +45,16 @@ interface ForecastCondition extends SlotData {
   air_temp_c: number;
 }
 
+interface TodayWaterFields {
+  water_temp_c: number | null;
+  wetsuit_label: string | null;
+  wetsuit_thickness: string | null;
+  wetsuit_note: string | null;
+}
+
+type ConditionSlotData = SlotData & TodayWaterFields;
+type TodayWaterSlot = TodayWaterFields & Pick<ForecastSlot, "label" | "time_range">;
+
 interface DisplaySlot {
   label: string;
   time_range: string;
@@ -82,7 +92,9 @@ interface ConditionData {
   date: string;
   generated_at: string;
   updated_at: string;
-  slots: SlotData[];
+  water_temp_summary: string | null;
+  wetsuit_summary: string | null;
+  slots: ConditionSlotData[];
 }
 
 interface TodayBoard {
@@ -109,8 +121,8 @@ interface TodayBoard {
   recommended_board_types: string[];
   slots: DisplaySlot[];
   local_note: string;
-  water_temp_summary: string;
-  wetsuit_summary: string;
+  water_temp_summary: string | null;
+  wetsuit_summary: string | null;
   ai_comment_status: string;
   notice: string;
 }
@@ -282,8 +294,8 @@ const FALLBACK_BOARD: TodayBoard = {
   recommended_board_types: ["ロング", "ミッドレングス"],
   slots: FALLBACK_SLOTS.map(displaySlotFromCondition),
   local_note: "江の島寄りは少し穏やかに見える場合があります。",
-  water_temp_summary: "水温データは参考値として確認してください。",
-  wetsuit_summary: "レッスンでは冷え対策のため一段暖かめが安心です。",
+  water_temp_summary: null,
+  wetsuit_summary: null,
   ai_comment_status: "fallback",
   notice:
     "この指数はAIと気象・海況データによる参考情報です。海の状況は急に変わることがあります。実際に海に入るかどうかは、現地の状況を確認して判断してください。",
@@ -362,7 +374,7 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 async function refreshBoard(env: Env): Promise<TodayBoard> {
-  const condition = await fetchConditions();
+  const condition = await fetchConditions(env);
   const board = await runDify(env.DIFY_API_KEY, condition);
   await env.QEST_KV.put(BOARD_KEY, JSON.stringify(board));
   return board;
@@ -375,15 +387,14 @@ async function refreshForecast(env: Env): Promise<ForecastBoard> {
   return forecast;
 }
 
-async function fetchConditions(): Promise<ConditionData> {
+async function fetchConditions(env: Env): Promise<ConditionData> {
   const { marine, weather } = await fetchRawForecastData(1);
   const forecastDate = String(marine.time[0] ?? weather.time[0] ?? "").slice(0, 10);
   if (!forecastDate) throw new Error("Open-Meteo returned no forecast date");
 
-  const slots = SLOT_DEFINITIONS.map((definition) => aggregateSlot(definition, forecastDate, marine, weather));
+  const slots = SLOT_DEFINITIONS.map((definition) => withEmptyWaterFields(aggregateSlot(definition, forecastDate, marine, weather)));
   const updatedAt = formatJapanDateTime();
-
-  return {
+  const condition: ConditionData = {
     mode: "today_board",
     location: "鵠沼海岸",
     latitude: 35.317,
@@ -391,8 +402,163 @@ async function fetchConditions(): Promise<ConditionData> {
     date: `${forecastDate} 00:00`,
     generated_at: updatedAt,
     updated_at: updatedAt,
+    water_temp_summary: null,
+    wetsuit_summary: null,
     slots,
   };
+  return enrichTodayConditionWithWater(env, condition, { marine, weather }, forecastDate);
+}
+
+function withEmptyWaterFields(slot: SlotData): ConditionSlotData {
+  return {
+    ...slot,
+    water_temp_c: null,
+    wetsuit_label: null,
+    wetsuit_thickness: null,
+    wetsuit_note: null,
+  };
+}
+
+async function enrichTodayConditionWithWater(
+  env: Env,
+  condition: ConditionData,
+  raw: RawForecastData,
+  forecastDate: string,
+): Promise<ConditionData> {
+  const cached = await env.QEST_KV.get<unknown>(FORECAST_KEY, "json");
+  const cachedSlots = isRecord(cached) && forecastHasWetsuitData(cached) && isFreshForecastForToday(cached)
+    ? todayKugenumaForecastSlots(cached, forecastDate)
+    : [];
+
+  if (cachedSlots.length) {
+    const enriched = applyWaterFieldsToCondition(condition, cachedSlots, "forecast cache");
+    if (enriched.enrichedCount > 0) {
+      console.log("Today water data injection", {
+        injected: true,
+        source: "forecast cache",
+        enrichedSlots: enriched.enrichedCount,
+      });
+      return enriched.condition;
+    }
+  }
+
+  const freshSlots = buildTodayWaterSlotsFromRaw(raw, forecastDate);
+  const enriched = applyWaterFieldsToCondition(condition, freshSlots, "fresh fetch");
+  console.log("Today water data injection", {
+    injected: enriched.enrichedCount > 0,
+    source: "fresh fetch",
+    enrichedSlots: enriched.enrichedCount,
+  });
+  return enriched.condition;
+}
+
+function isFreshForecastForToday(value: Record<string, unknown>): boolean {
+  return asString(value.updated_at, "").startsWith(currentJapanDate());
+}
+
+function todayKugenumaForecastSlots(value: Record<string, unknown>, forecastDate: string): TodayWaterSlot[] {
+  const days = Array.isArray(value.days) ? value.days : [];
+  const day = days.find((candidate) => isRecord(candidate) && candidate.date === forecastDate);
+  if (!isRecord(day) || !Array.isArray(day.spots)) return [];
+  const spot = day.spots.find((candidate) => isRecord(candidate) && candidate.spot_id === "kugenuma_main") ?? day.spots[0];
+  if (!isRecord(spot) || !Array.isArray(spot.slots)) return [];
+  return spot.slots.filter(isWaterSlot);
+}
+
+function buildTodayWaterSlotsFromRaw(raw: RawForecastData, forecastDate: string): TodayWaterSlot[] {
+  return SLOT_DEFINITIONS.map((definition) => {
+    const marineIndices = indicesForSlot(raw.marine.time, forecastDate, definition);
+    const weatherIndices = indicesForSlot(raw.weather.time, forecastDate, definition);
+    const waterTemp = optionalAverageAt(raw.marine.sea_surface_temperature, marineIndices);
+    if (waterTemp === null) {
+      return {
+        label: definition.label,
+        time_range: displayTimeRange(definition.time_range),
+        water_temp_c: null,
+        wetsuit_label: null,
+        wetsuit_thickness: null,
+        wetsuit_note: null,
+      };
+    }
+    const wind = optionalAverageAt(raw.weather.wind_speed_10m, weatherIndices) ?? 0;
+    const rain = sumAt(raw.weather.precipitation, weatherIndices);
+    const weatherCode = modeAt(raw.weather.weather_code, weatherIndices);
+    const airTemp = optionalAverageAt(raw.weather.temperature_2m, weatherIndices) ?? waterTemp;
+    const wetsuit = wetsuitRecommendation(round(waterTemp, 1), {
+      airTemp,
+      wind,
+      rain,
+      weather: weatherLabel(weatherCode),
+    });
+    return {
+      label: definition.label,
+      time_range: displayTimeRange(definition.time_range),
+      water_temp_c: round(waterTemp, 1),
+      wetsuit_label: wetsuit.label,
+      wetsuit_thickness: wetsuit.thickness,
+      wetsuit_note: wetsuit.note,
+    };
+  });
+}
+
+function applyWaterFieldsToCondition(
+  condition: ConditionData,
+  waterSlots: TodayWaterSlot[],
+  _source: "forecast cache" | "fresh fetch",
+): { condition: ConditionData; enrichedCount: number } {
+  let enrichedCount = 0;
+  const slots = condition.slots.map((slot) => {
+    const match = waterSlots.find((candidate) =>
+      candidate.label === slot.label || displayTimeRange(candidate.time_range) === displayTimeRange(slot.time_range),
+    );
+    if (!match || match.water_temp_c === null) return slot;
+    enrichedCount += 1;
+    return {
+      ...slot,
+      water_temp_c: match.water_temp_c,
+      wetsuit_label: match.wetsuit_label,
+      wetsuit_thickness: match.wetsuit_thickness,
+      wetsuit_note: match.wetsuit_note,
+    };
+  });
+  return {
+    condition: {
+      ...condition,
+      water_temp_summary: waterTempSummary(slots),
+      wetsuit_summary: wetsuitSummary(slots),
+      slots,
+    },
+    enrichedCount,
+  };
+}
+
+function isWaterSlot(value: unknown): value is TodayWaterSlot {
+  return (
+    isRecord(value) &&
+    typeof value.label === "string" &&
+    typeof value.time_range === "string" &&
+    typeof value.water_temp_c === "number" &&
+    typeof value.wetsuit_label === "string" &&
+    typeof value.wetsuit_thickness === "string" &&
+    typeof value.wetsuit_note === "string"
+  );
+}
+
+function waterTempSummary(slots: ConditionSlotData[]): string | null {
+  const values = slots.map((slot) => slot.water_temp_c).filter((value): value is number => typeof value === "number");
+  if (!values.length) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return min === max ? `水温はおおむね${min.toFixed(1)}℃です。` : `水温はおおむね${min.toFixed(1)}〜${max.toFixed(1)}℃です。`;
+}
+
+function wetsuitSummary(slots: ConditionSlotData[]): string | null {
+  const labels = [...new Set(slots.map((slot) => slot.wetsuit_label).filter((value): value is string => typeof value === "string"))];
+  const thicknesses = [...new Set(slots.map((slot) => slot.wetsuit_thickness).filter((value): value is string => typeof value === "string"))];
+  if (!labels.length && !thicknesses.length) return null;
+  const label = labels.length === 1 ? labels[0] : labels.join(" / ");
+  const thickness = thicknesses.length === 1 ? thicknesses[0] : thicknesses.join(" / ");
+  return `${label}（${thickness}）を目安にしてください。`;
 }
 
 async function fetchRawForecastData(forecastDays: number): Promise<RawForecastData> {
@@ -937,8 +1103,8 @@ function normalizeBoard(result: Record<string, unknown>, condition: ConditionDat
     recommended_board_types: recommendedBoardTypes,
     slots: normalizeDisplaySlots(result.slots, condition.slots),
     local_note: asString(result.local_note, "江の島寄りは少し穏やかに見える場合があります。"),
-    water_temp_summary: asString(result.water_temp_summary, "水温データは参考値として確認してください。"),
-    wetsuit_summary: asString(result.wetsuit_summary, "レッスンでは冷え対策のため一段暖かめが安心です。"),
+    water_temp_summary: asOptionalString(result.water_temp_summary, condition.water_temp_summary),
+    wetsuit_summary: asOptionalString(result.wetsuit_summary, condition.wetsuit_summary),
     ai_comment_status: asString(result.ai_comment_status, "ok"),
     notice: asString(
       result.notice,
@@ -996,14 +1162,14 @@ function normalizeStoredBoard(value: Record<string, unknown>): TodayBoard {
     ),
     slots: normalizeStoredDisplaySlots(value.slots),
     local_note: asString(value.local_note, FALLBACK_BOARD.local_note),
-    water_temp_summary: asString(value.water_temp_summary, FALLBACK_BOARD.water_temp_summary),
-    wetsuit_summary: asString(value.wetsuit_summary, FALLBACK_BOARD.wetsuit_summary),
+    water_temp_summary: asNullableString(value.water_temp_summary, FALLBACK_BOARD.water_temp_summary),
+    wetsuit_summary: asNullableString(value.wetsuit_summary, FALLBACK_BOARD.wetsuit_summary),
     ai_comment_status: asString(value.ai_comment_status, FALLBACK_BOARD.ai_comment_status),
     notice: asString(value.notice, FALLBACK_BOARD.notice),
   };
 }
 
-function normalizeDisplaySlots(value: unknown, fallbackSlots: SlotData[]): DisplaySlot[] {
+function normalizeDisplaySlots(value: unknown, fallbackSlots: ConditionSlotData[]): DisplaySlot[] {
   const rawSlots = Array.isArray(value) ? value : [];
   return fallbackSlots.map((fallback, index) => {
     const raw = isRecord(rawSlots[index]) ? rawSlots[index] : {};
@@ -1028,10 +1194,10 @@ function normalizeDisplaySlots(value: unknown, fallbackSlots: SlotData[]): Displ
       status: asString(raw.status, fallbackDisplay.status),
       message: asString(raw.message, fallbackDisplay.message),
       caution: asNullableString(raw.caution, fallbackDisplay.caution),
-      water_temp_c: asNullableNumber(raw.water_temp_c, fallbackDisplay.water_temp_c),
-      wetsuit_label: asNullableString(raw.wetsuit_label, fallbackDisplay.wetsuit_label),
-      wetsuit_thickness: asNullableString(raw.wetsuit_thickness, fallbackDisplay.wetsuit_thickness),
-      wetsuit_note: asNullableString(raw.wetsuit_note, fallbackDisplay.wetsuit_note),
+      water_temp_c: asOptionalNumber(raw.water_temp_c, fallbackDisplay.water_temp_c),
+      wetsuit_label: asOptionalString(raw.wetsuit_label, fallbackDisplay.wetsuit_label),
+      wetsuit_thickness: asOptionalString(raw.wetsuit_thickness, fallbackDisplay.wetsuit_thickness),
+      wetsuit_note: asOptionalString(raw.wetsuit_note, fallbackDisplay.wetsuit_note),
     };
   });
 }
@@ -1071,7 +1237,7 @@ function normalizeStoredDisplaySlots(value: unknown): DisplaySlot[] {
   });
 }
 
-function displaySlotFromCondition(slot: SlotData): DisplaySlot {
+function displaySlotFromCondition(slot: SlotData & Partial<TodayWaterFields>): DisplaySlot {
   const status = slot.rule_beginner_score >= 4 || slot.rule_longboard_score >= 4 ? "おすすめ" : "注意";
   const beginner = slot.rule_beginner_score;
   const longboard = slot.rule_longboard_score;
@@ -1094,10 +1260,10 @@ function displaySlotFromCondition(slot: SlotData): DisplaySlot {
     status,
     message,
     caution: slot.warnings[0] ?? null,
-    water_temp_c: null,
-    wetsuit_label: null,
-    wetsuit_thickness: null,
-    wetsuit_note: null,
+    water_temp_c: asNullableNumber(slot.water_temp_c, null),
+    wetsuit_label: asNullableString(slot.wetsuit_label, null),
+    wetsuit_thickness: asNullableString(slot.wetsuit_thickness, null),
+    wetsuit_note: asNullableString(slot.wetsuit_note, null),
   };
 }
 
@@ -1320,6 +1486,10 @@ function formatJapanDateTime(value: Date = new Date()): string {
   return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
+function currentJapanDate(value: Date = new Date()): string {
+  return formatJapanDateTime(value).slice(0, 10);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1333,8 +1503,17 @@ function asNullableString(value: unknown, fallback: string | null): string | nul
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
+function asOptionalString(value: unknown, fallback: string | null): string | null {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
 function asNullableNumber(value: unknown, fallback: number | null): number | null {
   if (value === null) return null;
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? round(number, 1) : fallback;
+}
+
+function asOptionalNumber(value: unknown, fallback: number | null): number | null {
   const number = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(number) ? round(number, 1) : fallback;
 }
