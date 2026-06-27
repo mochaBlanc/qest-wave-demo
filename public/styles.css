@@ -711,12 +711,147 @@ h2 {
 }
 
 .recommendation-box,
-.detail-panel {
+.detail-panel,
+.analyst-panel {
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--paper);
   box-shadow: 0 8px 22px rgba(65, 50, 32, 0.06);
+}
+
+.analyst-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.analyst-panel h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+
+#analyst-content {
+  display: grid;
+  gap: 12px;
+}
+
+.analyst-summary-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.analyst-summary-card {
+  padding: 10px 11px;
+  border: 1px solid var(--blue-line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.analyst-summary-card span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ocean);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.analyst-summary-card p {
+  margin: 0;
+  color: var(--navy);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.analyst-note-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 9px 11px 9px 26px;
+  border-radius: 12px;
+  background: #fbf8f1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.analyst-groups {
+  display: grid;
+  gap: 11px;
+}
+
+.analyst-group {
+  display: grid;
+  gap: 7px;
+}
+
+.analyst-group h3 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.analyst-card-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.analyst-card {
+  display: grid;
+  gap: 5px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.analyst-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.analyst-card strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.analyst-card small {
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(37, 111, 134, 0.1);
+  color: var(--ocean);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.analyst-score {
+  color: var(--ocean);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.analyst-reason,
+.analyst-caution {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.analyst-reason {
+  color: var(--navy);
+}
+
+.analyst-caution {
+  color: #8a5b2d;
 }
 
 .compact-heading {

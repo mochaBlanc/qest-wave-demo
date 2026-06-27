@@ -1544,23 +1544,40 @@ function normalizeForecastAnalyst(value: Record<string, unknown>): ForecastAnaly
 function normalizeForecastAnalystRecommendations(value: unknown): ForecastAnalystRecommendations {
   const raw = isRecord(value) ? value : {};
   return {
-    lesson: sanitizeAnalystArray(raw.lesson),
-    beginner: sanitizeAnalystArray(raw.beginner),
-    experienced: sanitizeAnalystArray(raw.experienced),
+    lesson: sanitizeRecommendationArray(raw.lesson),
+    beginner: sanitizeRecommendationArray(raw.beginner),
+    experienced: sanitizeRecommendationArray(raw.experienced),
   };
 }
 
 function normalizeForecastAnalystBoardRecommendations(value: unknown): ForecastAnalystBoardRecommendations {
   const raw = isRecord(value) ? value : {};
   return {
-    longboard: sanitizeAnalystArray(raw.longboard),
-    midlength: sanitizeAnalystArray(raw.midlength),
-    shortboard: sanitizeAnalystArray(raw.shortboard),
+    longboard: sanitizeRecommendationArray(raw.longboard),
+    midlength: sanitizeRecommendationArray(raw.midlength),
+    shortboard: sanitizeRecommendationArray(raw.shortboard),
   };
 }
 
 function sanitizeAnalystArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value.map(sanitizeAnalystValue).filter((item) => item !== null) : [];
+}
+
+function sanitizeRecommendationArray(value: unknown): unknown[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const sanitized = sanitizeAnalystValue(item);
+      if (sanitized === null) return null;
+      if (isRecord(sanitized)) {
+        return {
+          ...sanitized,
+          caution: Object.prototype.hasOwnProperty.call(sanitized, "caution") ? sanitized.caution : null,
+        };
+      }
+      return { reason: sanitized, caution: null };
+    })
+    .filter((item) => item !== null);
 }
 
 function sanitizeAnalystValue(value: unknown): unknown {
