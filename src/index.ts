@@ -2,6 +2,7 @@ interface Env {
   QEST_KV: KVNamespace;
   ASSETS: Fetcher;
   DIFY_API_KEY: string;
+  DIFY_FORECAST_API_KEY?: string;
   REFRESH_SECRET: string;
 }
 
@@ -204,6 +205,30 @@ interface ForecastDay {
   spots: ForecastSpot[];
 }
 
+interface ForecastAnalystRecommendations {
+  lesson: unknown[];
+  beginner: unknown[];
+  experienced: unknown[];
+}
+
+interface ForecastAnalystBoardRecommendations {
+  longboard: unknown[];
+  midlength: unknown[];
+  shortboard: unknown[];
+}
+
+interface ForecastAnalyst {
+  ai_comment_status: "ok" | "fallback";
+  weekly_summary: string | null;
+  lesson_summary: string | null;
+  practice_summary: string | null;
+  recommendations: ForecastAnalystRecommendations;
+  board_recommendations: ForecastAnalystBoardRecommendations;
+  wetsuit_summary: string | null;
+  confidence_notes: unknown[];
+  notice: string;
+}
+
 interface ForecastBoard {
   updated_at: string;
   brand: "BIG WAVE";
@@ -213,8 +238,11 @@ interface ForecastBoard {
   tags: string[];
   days: ForecastDay[];
   wetsuit_notice: string;
+  analyst: ForecastAnalyst;
   notice: string;
 }
+
+type ForecastWithoutAnalyst = Omit<ForecastBoard, "analyst">;
 
 interface RawForecastData {
   marine: HourlyData;
@@ -234,11 +262,16 @@ interface SpotDefinition {
   advancedBonus: number;
 }
 
+interface DifyOutputs {
+  result?: unknown;
+  text?: unknown;
+  answer?: unknown;
+  textString?: unknown;
+}
+
 interface DifyResponse {
   data?: {
-    outputs?: {
-      result?: unknown;
-    };
+    outputs?: DifyOutputs;
   };
 }
 
@@ -357,7 +390,7 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/api/forecast") {
       const cached = await env.QEST_KV.get<unknown>(FORECAST_KEY, "json");
-      if (isRecord(cached) && forecastHasWetsuitData(cached)) return json(cached);
+      if (isRecord(cached) && forecastHasWetsuitData(cached)) return json(normalizeStoredForecast(cached));
 
       try {
         return json(await refreshForecast(env));
@@ -423,7 +456,9 @@ async function refreshBoard(env: Env): Promise<TodayBoard> {
 
 async function refreshForecast(env: Env): Promise<ForecastBoard> {
   const raw = await fetchRawForecastData(7);
-  const forecast = buildForecastBoard(raw);
+  const forecastBase = buildForecastBoard(raw);
+  const analyst = await runDifyForecastAnalyst(env, forecastBase);
+  const forecast: ForecastBoard = { ...forecastBase, analyst };
   await env.QEST_KV.put(FORECAST_KEY, JSON.stringify(forecast));
   return forecast;
 }
@@ -841,7 +876,7 @@ function aggregateSlot(
   };
 }
 
-function buildForecastBoard(raw: RawForecastData): ForecastBoard {
+function buildForecastBoard(raw: RawForecastData): ForecastWithoutAnalyst {
   const dates = uniqueDates(raw.marine.time).slice(0, 7);
   if (!dates.length) throw new Error("Open-Meteo returned no forecast dates");
 
@@ -1147,6 +1182,41 @@ function forecastHasWetsuitData(value: Record<string, unknown>): boolean {
   );
 }
 
+function normalizeStoredForecast(value: Record<string, unknown>): ForecastBoard {
+  return {
+    updated_at: asString(value.updated_at, formatJapanDateTime()),
+    brand: "BIG WAVE",
+    title: "湘南7日サーフィン予測",
+    area: "鵠沼・江の島・鎌倉側",
+    default_metric: "general_wave_index",
+    tags: normalizeStringArray(value.tags, ["general", "lesson", "beginner", "longboard", "midlength", "shortboard", "advanced"]),
+    days: Array.isArray(value.days) ? (value.days as ForecastDay[]) : [],
+    wetsuit_notice: asString(
+      value.wetsuit_notice,
+      "水温・気温・風・体感には個人差があります。寒がりの方やレッスンでは一段暖かめを選ぶと安心です。",
+    ),
+    analyst: normalizeStoredForecastAnalyst(value.analyst),
+    notice: asString(
+      value.notice,
+      "この予測は気象・海況データと簡易ルールによる参考情報です。実際の海況は現地で確認してください。",
+    ),
+  };
+}
+
+function normalizeStoredForecastAnalyst(value: unknown): ForecastAnalyst {
+  if (!isRecord(value)) return fallbackForecastAnalyst();
+  const normalized = normalizeForecastAnalyst(value);
+  const status = value.ai_comment_status === "ok" ? "ok" : "fallback";
+  return {
+    ...normalized,
+    ai_comment_status: status,
+    confidence_notes:
+      status === "ok" || normalized.confidence_notes.length
+        ? normalized.confidence_notes
+        : fallbackForecastAnalyst().confidence_notes,
+  };
+}
+
 function uniqueDates(times: string[]): string[] {
   const dates: string[] = [];
   for (const time of times) {
@@ -1190,26 +1260,38 @@ function forecastDaySummary(baselineSlots: SlotData[], spots: ForecastSpot[]): s
   return `${bestLesson.spot.spot_name}の${bestLesson.slot.label}が、レッスン・基礎練習の第一候補です。`;
 }
 
-async function runDify(apiKey: string, condition: ConditionData): Promise<TodayBoard> {
-  if (!apiKey) throw new Error("DIFY_API_KEY is not configured");
+async function callDifyWorkflow(
+  apiKey: string,
+  body: { inputs: Record<string, unknown>; response_mode: "blocking"; user: string },
+  secretName: string,
+): Promise<DifyResponse> {
+  if (!apiKey) throw new Error(`${secretName} is not configured`);
   const response = await fetch("https://api.dify.ai/v1/workflows/run", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) throw new Error(`Dify API failed with ${response.status}`);
+  return (await response.json()) as DifyResponse;
+}
+
+async function runDify(apiKey: string, condition: ConditionData): Promise<TodayBoard> {
+  const payload = await callDifyWorkflow(
+    apiKey,
+    {
       inputs: {
         mode: "today_board",
         condition_json: JSON.stringify(condition),
       },
       response_mode: "blocking",
       user: "big-wave-kugenuma",
-    }),
-  });
-
-  if (!response.ok) throw new Error(`Dify API failed with ${response.status}`);
-  const payload = (await response.json()) as DifyResponse;
+    },
+    "DIFY_API_KEY",
+  );
   const result = parseDifyResult(payload.data?.outputs?.result);
   if (!isRecord(result)) throw new Error("Dify result was not an object");
   console.log("Dify today schema", {
@@ -1223,6 +1305,49 @@ async function runDify(apiKey: string, condition: ConditionData): Promise<TodayB
   return normalizeBoard(result, condition);
 }
 
+async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst): Promise<ForecastAnalyst> {
+  const apiKey = env.DIFY_FORECAST_API_KEY || env.DIFY_API_KEY;
+  if (!apiKey) {
+    console.log("Forecast analyst fallback", { reason: "missing_api_key" });
+    return fallbackForecastAnalyst();
+  }
+
+  try {
+    console.log("Forecast analyst call started", {
+      days: forecast.days.length,
+      spots: forecast.days[0]?.spots.length ?? 0,
+    });
+    const payload = await callDifyWorkflow(
+      apiKey,
+      {
+        inputs: {
+          forecast_json: JSON.stringify(forecast),
+          mode: "weekly_recommendation",
+        },
+        response_mode: "blocking",
+        user: "big-wave-kugenuma",
+      },
+      env.DIFY_FORECAST_API_KEY ? "DIFY_FORECAST_API_KEY" : "DIFY_API_KEY",
+    );
+    const result = parseDifyOutputs(payload.data?.outputs);
+    if (!isRecord(result)) throw new Error("Forecast analyst result was not an object");
+    console.log("Forecast analyst success", {
+      parsedKeys: Object.keys(result).slice(0, 12),
+    });
+    return normalizeForecastAnalyst(result);
+  } catch (error) {
+    console.error("Forecast analyst fallback", error);
+    return fallbackForecastAnalyst();
+  }
+}
+
+function parseDifyOutputs(outputs: DifyOutputs | undefined): unknown {
+  if (!outputs || !isRecord(outputs)) return undefined;
+  const candidates = [outputs.result, outputs.text, outputs.answer, outputs.textString];
+  const candidate = candidates.find((value) => value !== undefined && value !== null && value !== "");
+  return candidate === undefined ? undefined : parseDifyResult(candidate);
+}
+
 function parseDifyResult(result: unknown): unknown {
   if (typeof result !== "string") return result;
   const trimmed = result.trim();
@@ -1232,6 +1357,100 @@ function parseDifyResult(result: unknown): unknown {
   } catch {
     throw new Error("Dify result was not valid JSON");
   }
+}
+
+function fallbackForecastAnalyst(): ForecastAnalyst {
+  return {
+    ai_comment_status: "fallback",
+    weekly_summary: null,
+    lesson_summary: null,
+    practice_summary: null,
+    recommendations: {
+      lesson: [],
+      beginner: [],
+      experienced: [],
+    },
+    board_recommendations: {
+      longboard: [],
+      midlength: [],
+      shortboard: [],
+    },
+    wetsuit_summary: null,
+    confidence_notes: [
+      "AIコメントを取得できませんでした。予報データを参考に、前日夜と当日朝に再確認してください。",
+    ],
+    notice: "この予測は気象・海況データによる参考情報です。実際の海況は現地で確認してください。",
+  };
+}
+
+function normalizeForecastAnalyst(value: Record<string, unknown>): ForecastAnalyst {
+  return {
+    ai_comment_status: "ok",
+    weekly_summary: optionalCleanText(value.weekly_summary),
+    lesson_summary: optionalCleanText(value.lesson_summary),
+    practice_summary: optionalCleanText(value.practice_summary),
+    recommendations: normalizeForecastAnalystRecommendations(value.recommendations),
+    board_recommendations: normalizeForecastAnalystBoardRecommendations(value.board_recommendations),
+    wetsuit_summary: optionalCleanText(value.wetsuit_summary),
+    confidence_notes: sanitizeAnalystArray(value.confidence_notes),
+    notice: cleanText(
+      value.notice,
+      "この予測は気象・海況データによる参考情報です。実際の海況は現地で確認してください。",
+    ),
+  };
+}
+
+function normalizeForecastAnalystRecommendations(value: unknown): ForecastAnalystRecommendations {
+  const raw = isRecord(value) ? value : {};
+  return {
+    lesson: sanitizeAnalystArray(raw.lesson),
+    beginner: sanitizeAnalystArray(raw.beginner),
+    experienced: sanitizeAnalystArray(raw.experienced),
+  };
+}
+
+function normalizeForecastAnalystBoardRecommendations(value: unknown): ForecastAnalystBoardRecommendations {
+  const raw = isRecord(value) ? value : {};
+  return {
+    longboard: sanitizeAnalystArray(raw.longboard),
+    midlength: sanitizeAnalystArray(raw.midlength),
+    shortboard: sanitizeAnalystArray(raw.shortboard),
+  };
+}
+
+function sanitizeAnalystArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value.map(sanitizeAnalystValue).filter((item) => item !== null) : [];
+}
+
+function sanitizeAnalystValue(value: unknown): unknown {
+  if (typeof value === "string") return cleanMarkdownText(value);
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
+  if (Array.isArray(value)) return value.map(sanitizeAnalystValue).filter((item) => item !== null);
+  if (!isRecord(value)) return null;
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, item]) => [key, sanitizeAnalystValue(item)] as const)
+      .filter(([, item]) => item !== null),
+  );
+}
+
+function optionalCleanText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? cleanMarkdownText(value) : null;
+}
+
+function cleanText(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? cleanMarkdownText(value) : fallback;
+}
+
+function cleanMarkdownText(value: string): string {
+  return value
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*([^*]*)\*\*/g, "$1")
+    .replace(/__([^_]*)__/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .trim();
 }
 
 function normalizeBoard(result: Record<string, unknown>, condition: ConditionData): TodayBoard {
