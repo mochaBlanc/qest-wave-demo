@@ -970,6 +970,12 @@ h2 {
   line-height: 1.65;
 }
 
+.tide-note {
+  margin-top: 8px;
+  background: #fbf8f1;
+  color: var(--muted);
+}
+
 @media (min-width: 720px) {
   .page-shell {
     width: min(100% - 48px, 980px);

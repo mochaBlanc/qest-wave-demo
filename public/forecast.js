@@ -252,7 +252,7 @@ function renderDetail() {
       <div><dt>信頼度</dt><dd>${escapeHtml(selected.slot.confidence)}</dd></div>
       <div><dt>水温</dt><dd>${escapeHtml(formatWaterTemp(selected.slot.water_temp_c))}</dd></div>
       <div><dt>ウェット</dt><dd>${escapeHtml(selected.slot.wetsuit_label)} / ${escapeHtml(selected.slot.wetsuit_thickness)}</dd></div>
-      ${hasTide(selected.slot) ? `<div><dt>潮位</dt><dd>${escapeHtml(formatTide(selected.slot))}</dd></div>` : ""}
+      ${hasTide(selected.slot) ? `<div><dt>潮位目安</dt><dd>${escapeHtml(formatTide(selected.slot))}</dd></div>` : ""}
     </dl>
     <p class="detail-message">${escapeHtml(selected.slot.message)}</p>
     ${selected.slot.tide_note ? `<p class="tide-note">${escapeHtml(selected.slot.tide_note)}</p>` : ""}
@@ -371,13 +371,12 @@ function formatWaterTemp(value) {
 }
 
 function hasTide(slot) {
-  return Number.isFinite(Number(slot?.tide_height_m)) || Boolean(slot?.tide_trend);
+  return Number.isFinite(Number(slot?.tide_height_m)) && typeof slot?.tide_trend === "string" && slot.tide_trend.trim() !== "";
 }
 
 function formatTide(slot) {
   const height = Number(slot?.tide_height_m);
-  const heightText = Number.isFinite(height) ? `${height.toFixed(2)}m` : "—";
-  return `${heightText} / ${text(slot?.tide_trend)}`;
+  return `${height.toFixed(2)}m / ${slot.tide_trend}`;
 }
 
 function isSelected(spot, slot) {
