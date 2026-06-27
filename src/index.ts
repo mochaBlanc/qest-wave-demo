@@ -390,7 +390,17 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/api/forecast") {
       const cached = await env.QEST_KV.get<unknown>(FORECAST_KEY, "json");
-      if (isRecord(cached) && forecastHasWetsuitData(cached)) return json(normalizeStoredForecast(cached));
+      if (isRecord(cached) && forecastHasWetsuitData(cached)) {
+        const normalized = normalizeStoredForecast(cached);
+        if (normalized.analyst.ai_comment_status === "ok" || !env.DIFY_FORECAST_API_KEY) return json(normalized);
+        console.warn("Cached forecast analyst fallback; refresh attempted");
+        try {
+          return json(await refreshForecast(env));
+        } catch (error) {
+          console.error("Forecast analyst refresh from cached fallback failed", error);
+          return json(normalized);
+        }
+      }
 
       try {
         return json(await refreshForecast(env));
@@ -1264,6 +1274,7 @@ async function callDifyWorkflow(
   apiKey: string,
   body: { inputs: Record<string, unknown>; response_mode: "blocking"; user: string },
   secretName: string,
+  diagnosticsLabel?: string,
 ): Promise<DifyResponse> {
   if (!apiKey) throw new Error(`${secretName} is not configured`);
   const response = await fetch("https://api.dify.ai/v1/workflows/run", {
@@ -1275,6 +1286,9 @@ async function callDifyWorkflow(
     body: JSON.stringify(body),
   });
 
+  if (diagnosticsLabel) {
+    console.log(`${diagnosticsLabel} response HTTP status`, response.status);
+  }
   if (!response.ok) throw new Error(`Dify API failed with ${response.status}`);
   return (await response.json()) as DifyResponse;
 }
@@ -1307,6 +1321,7 @@ async function runDify(apiKey: string, condition: ConditionData): Promise<TodayB
 
 async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst): Promise<ForecastAnalyst> {
   const apiKey = env.DIFY_FORECAST_API_KEY;
+  console.log("forecast analyst key present", Boolean(apiKey));
   if (!apiKey) {
     console.warn("DIFY_FORECAST_API_KEY missing; analyst fallback used");
     return fallbackForecastAnalyst();
@@ -1328,35 +1343,61 @@ async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst
         user: "big-wave-kugenuma",
       },
       "DIFY_FORECAST_API_KEY",
+      "forecast analyst",
     );
-    const result = parseDifyOutputs(payload.data?.outputs);
+    const result = parseDifyForecastResult(payload.data?.outputs);
     if (!isRecord(result)) throw new Error("Forecast analyst result was not an object");
     console.log("Forecast analyst success", {
       parsedKeys: Object.keys(result).slice(0, 12),
     });
     return normalizeForecastAnalyst(result);
   } catch (error) {
-    console.error("Forecast analyst fallback", error);
+    console.error("Forecast analyst parse/fallback reason", error);
     return fallbackForecastAnalyst();
   }
 }
 
-function parseDifyOutputs(outputs: DifyOutputs | undefined): unknown {
-  if (!outputs || !isRecord(outputs)) return undefined;
-  const candidates = [outputs.result, outputs.text, outputs.answer, outputs.textString];
-  const candidate = candidates.find((value) => value !== undefined && value !== null && value !== "");
-  return candidate === undefined ? undefined : parseDifyResult(candidate);
+function parseDifyForecastResult(outputs: DifyOutputs | undefined): unknown {
+  const outputKeys = outputs && isRecord(outputs) ? Object.keys(outputs) : [];
+  console.log("Forecast analyst output keys", outputKeys);
+  if (!outputs || !isRecord(outputs) || outputs.result === undefined || outputs.result === null || outputs.result === "") {
+    console.warn("Forecast analyst fallback reason", { reason: "missing_outputs_result", outputKeys });
+    throw new Error("Forecast analyst outputs.result was missing");
+  }
+  try {
+    const parsed = parseDifyResult(outputs.result);
+    console.log("Forecast analyst parse success", { resultType: typeof parsed });
+    return parsed;
+  } catch (error) {
+    console.warn("Forecast analyst parse failure", { reason: error instanceof Error ? error.message : "unknown_parse_error" });
+    throw error;
+  }
 }
 
 function parseDifyResult(result: unknown): unknown {
   if (typeof result !== "string") return result;
   const trimmed = result.trim();
   const withoutFence = trimmed.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, "$1").trim();
+  const jsonText = extractJsonObjectText(withoutFence);
   try {
-    return JSON.parse(withoutFence) as unknown;
+    const parsed = JSON.parse(jsonText) as unknown;
+    if (typeof parsed === "string") return parseDifyResult(parsed);
+    return parsed;
   } catch {
     throw new Error("Dify result was not valid JSON");
   }
+}
+
+function extractJsonObjectText(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return trimmed;
+  const firstObject = trimmed.indexOf("{");
+  const lastObject = trimmed.lastIndexOf("}");
+  if (firstObject !== -1 && lastObject > firstObject) return trimmed.slice(firstObject, lastObject + 1);
+  const firstArray = trimmed.indexOf("[");
+  const lastArray = trimmed.lastIndexOf("]");
+  if (firstArray !== -1 && lastArray > firstArray) return trimmed.slice(firstArray, lastArray + 1);
+  return trimmed;
 }
 
 function fallbackForecastAnalyst(): ForecastAnalyst {
