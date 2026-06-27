@@ -1306,9 +1306,9 @@ async function runDify(apiKey: string, condition: ConditionData): Promise<TodayB
 }
 
 async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst): Promise<ForecastAnalyst> {
-  const apiKey = env.DIFY_FORECAST_API_KEY || env.DIFY_API_KEY;
+  const apiKey = env.DIFY_FORECAST_API_KEY;
   if (!apiKey) {
-    console.log("Forecast analyst fallback", { reason: "missing_api_key" });
+    console.warn("DIFY_FORECAST_API_KEY missing; analyst fallback used");
     return fallbackForecastAnalyst();
   }
 
@@ -1327,7 +1327,7 @@ async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst
         response_mode: "blocking",
         user: "big-wave-kugenuma",
       },
-      env.DIFY_FORECAST_API_KEY ? "DIFY_FORECAST_API_KEY" : "DIFY_API_KEY",
+      "DIFY_FORECAST_API_KEY",
     );
     const result = parseDifyOutputs(payload.data?.outputs);
     if (!isRecord(result)) throw new Error("Forecast analyst result was not an object");
