@@ -275,6 +275,52 @@ interface DifyResponse {
   };
 }
 
+interface CompactForecastSlotForAnalyst {
+  label: string;
+  time_range: string;
+  general_wave_index: number;
+  lesson_index: number;
+  beginner_index: number;
+  longboard_index: number;
+  midlength_index: number;
+  shortboard_index: number;
+  advanced_index: number;
+  status: string;
+  message: string;
+  caution: string | null;
+  confidence: ForecastConfidence;
+  water_temp_c: number;
+  wetsuit_label: string;
+  wetsuit_thickness: string;
+}
+
+interface CompactForecastSpotForAnalyst {
+  spot_id: string;
+  spot_name: string;
+  area: string;
+  slots: CompactForecastSlotForAnalyst[];
+}
+
+interface CompactForecastDayForAnalyst {
+  date: string;
+  weekday: string;
+  confidence: ForecastConfidence;
+  summary: string;
+  spots: CompactForecastSpotForAnalyst[];
+}
+
+interface CompactForecastForAnalyst {
+  updated_at: string;
+  brand: "BIG WAVE";
+  title: "湘南7日サーフィン予測";
+  area: "鵠沼・江の島・鎌倉側";
+  default_metric: "general_wave_index";
+  tags: string[];
+  days: CompactForecastDayForAnalyst[];
+  wetsuit_notice: string;
+  notice: string;
+}
+
 const BOARD_KEY = "qest_today_board";
 const FORECAST_KEY = "surf:forecast:v1";
 const JSON_HEADERS = {
@@ -1289,7 +1335,16 @@ async function callDifyWorkflow(
   if (diagnosticsLabel) {
     console.log(`${diagnosticsLabel} response HTTP status`, response.status);
   }
-  if (!response.ok) throw new Error(`Dify API failed with ${response.status}`);
+  if (!response.ok) {
+    if (diagnosticsLabel) {
+      const errorText = await response.text();
+      console.error(`${diagnosticsLabel} Dify error`, {
+        status: response.status,
+        body: errorText.slice(0, 1000),
+      });
+    }
+    throw new Error(`Dify API failed with ${response.status}`);
+  }
   return (await response.json()) as DifyResponse;
 }
 
@@ -1328,19 +1383,25 @@ async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst
   }
 
   try {
+    const compactForecastForAnalyst = compactForecastForAnalystInput(forecast);
+    const forecastJsonText = JSON.stringify(compactForecastForAnalyst);
     console.log("Forecast analyst call started", {
       days: forecast.days.length,
       spots: forecast.days[0]?.spots.length ?? 0,
+    });
+    console.log("Forecast analyst compact input", {
+      days: compactForecastForAnalyst.days.length,
+      length: forecastJsonText.length,
     });
     const payload = await callDifyWorkflow(
       apiKey,
       {
         inputs: {
-          forecast_json: JSON.stringify(forecast),
+          forecast_json: forecastJsonText,
           mode: "weekly_recommendation",
         },
         response_mode: "blocking",
-        user: "big-wave-kugenuma",
+        user: "big-wave-worker",
       },
       "DIFY_FORECAST_API_KEY",
       "forecast analyst",
@@ -1355,6 +1416,48 @@ async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst
     console.error("Forecast analyst parse/fallback reason", error);
     return fallbackForecastAnalyst();
   }
+}
+
+function compactForecastForAnalystInput(forecast: ForecastWithoutAnalyst): CompactForecastForAnalyst {
+  return {
+    updated_at: forecast.updated_at,
+    brand: forecast.brand,
+    title: forecast.title,
+    area: forecast.area,
+    default_metric: forecast.default_metric,
+    tags: forecast.tags,
+    days: forecast.days.map((day) => ({
+      date: day.date,
+      weekday: day.weekday,
+      confidence: day.confidence,
+      summary: day.summary,
+      spots: day.spots.map((spot) => ({
+        spot_id: spot.spot_id,
+        spot_name: spot.spot_name,
+        area: spot.area,
+        slots: spot.slots.map((slot) => ({
+          label: slot.label,
+          time_range: slot.time_range,
+          general_wave_index: slot.general_wave_index,
+          lesson_index: slot.lesson_index,
+          beginner_index: slot.beginner_index,
+          longboard_index: slot.longboard_index,
+          midlength_index: slot.midlength_index,
+          shortboard_index: slot.shortboard_index,
+          advanced_index: slot.advanced_index,
+          status: slot.status,
+          message: slot.message,
+          caution: slot.caution,
+          confidence: slot.confidence,
+          water_temp_c: slot.water_temp_c,
+          wetsuit_label: slot.wetsuit_label,
+          wetsuit_thickness: slot.wetsuit_thickness,
+        })),
+      })),
+    })),
+    wetsuit_notice: forecast.wetsuit_notice,
+    notice: forecast.notice,
+  };
 }
 
 function parseDifyForecastResult(outputs: DifyOutputs | undefined): unknown {
