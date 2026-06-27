@@ -90,92 +90,25 @@ function renderAnalyst() {
   forecastElements.analystContent.replaceChildren();
   if (!shouldShow) return;
 
-  const fragment = document.createDocumentFragment();
   const summaries = [
-    ["週間サマリー", analyst.weekly_summary],
-    ["レッスン", analyst.lesson_summary],
-    ["練習", analyst.practice_summary],
-    ["ウェット", analyst.wetsuit_summary],
+    ["今週の狙い目", analyst.weekly_summary],
+    ["レッスン候補", analyst.lesson_summary],
   ].filter(([, value]) => typeof value === "string" && value.trim());
 
-  if (summaries.length) {
-    const summaryGrid = document.createElement("div");
-    summaryGrid.className = "analyst-summary-grid";
-    summaryGrid.replaceChildren(...summaries.map(([label, value]) => {
-      const item = document.createElement("article");
-      item.className = "analyst-summary-card";
-      item.innerHTML = `<span>${escapeHtml(label)}</span><p>${escapeHtml(value)}</p>`;
-      return item;
-    }));
-    fragment.append(summaryGrid);
+  if (!summaries.length) {
+    forecastElements.analystSection.hidden = true;
+    return;
   }
 
-  const notes = Array.isArray(analyst.confidence_notes) ? analyst.confidence_notes.filter(Boolean) : [];
-  if (notes.length) {
-    const noteList = document.createElement("ul");
-    noteList.className = "analyst-note-list";
-    noteList.replaceChildren(...notes.map((note) => {
-      const item = document.createElement("li");
-      item.textContent = String(note);
-      return item;
-    }));
-    fragment.append(noteList);
-  }
-
-  const groups = [
-    ["レッスン", analyst.recommendations?.lesson],
-    ["初心者", analyst.recommendations?.beginner],
-    ["経験者", analyst.recommendations?.experienced],
-    ["ロング", analyst.board_recommendations?.longboard],
-    ["ミッドレングス", analyst.board_recommendations?.midlength],
-    ["ショート", analyst.board_recommendations?.shortboard],
-  ].filter(([, items]) => Array.isArray(items) && items.length);
-
-  if (groups.length) {
-    const groupWrap = document.createElement("div");
-    groupWrap.className = "analyst-groups";
-    groupWrap.replaceChildren(...groups.map(([label, items]) => {
-      const section = document.createElement("section");
-      section.className = "analyst-group";
-      const title = document.createElement("h3");
-      title.textContent = label;
-      const cards = document.createElement("div");
-      cards.className = "analyst-card-grid";
-      cards.replaceChildren(...items.map((item) => analystRecommendationCard(item)));
-      section.replaceChildren(title, cards);
-      return section;
-    }));
-    fragment.append(groupWrap);
-  }
-
-  forecastElements.analystContent.append(fragment);
-}
-
-function analystRecommendationCard(item) {
-  const record = isObject(item) ? item : { reason: item, caution: null };
-  const date = analystText(record.date ?? record.d);
-  const weekday = analystText(record.weekday ?? record.w);
-  const spot = analystText(record.spot_name ?? record.spot);
-  const slotLabel = analystText(record.slot_label ?? record.label ?? record.l);
-  const timeRange = analystText(record.time_range ?? record.time ?? record.t);
-  const confidence = analystText(record.confidence ?? record.conf);
-  const reason = analystText(record.reason ?? record.message ?? record.summary);
-  const caution = record.caution == null ? null : analystText(record.caution);
-  const scoreValue = analystScore(record.score ?? record.index ?? record.idx);
-  const card = document.createElement("article");
-  card.className = "analyst-card";
-  card.innerHTML = `
-    <div class="analyst-meta">
-      <span>${escapeHtml([date, weekday].filter(Boolean).join(" "))}</span>
-      <span>${escapeHtml(spot)}</span>
-    </div>
-    <strong>${escapeHtml([slotLabel, timeRange].filter(Boolean).join(" / "))}</strong>
-    ${scoreValue ? `<em class="analyst-score">${escapeHtml(stars(scoreValue))}</em>` : ""}
-    ${confidence ? `<small>${escapeHtml(confidence)}</small>` : ""}
-    ${reason ? `<p class="analyst-reason">${escapeHtml(reason)}</p>` : ""}
-    ${caution ? `<p class="analyst-caution">${escapeHtml(caution)}</p>` : ""}
-  `;
-  return card;
+  const summaryList = document.createElement("div");
+  summaryList.className = "analyst-summary-list";
+  summaryList.replaceChildren(...summaries.map(([label, value]) => {
+    const row = document.createElement("p");
+    row.className = "analyst-summary-row";
+    row.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>`;
+    return row;
+  }));
+  forecastElements.analystContent.append(summaryList);
 }
 
 function renderTags() {
@@ -226,7 +159,7 @@ function renderDays() {
 }
 
 function renderRecommendations() {
-  forecastElements.recommendationTitle.textContent = "この日の候補";
+  forecastElements.recommendationTitle.textContent = "候補";
   const recommendations = topRecommendations();
   if (!recommendations.length) {
     forecastElements.recommendations.textContent = isToday(selectedDay())
@@ -433,24 +366,6 @@ function stars(value) {
 function formatWaterTemp(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? `${numeric.toFixed(1)}℃` : "—";
-}
-
-function analystText(value) {
-  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
-}
-
-function analystScore(value) {
-  if (isObject(value)) {
-    const scores = Object.values(value).map((item) => Number(item)).filter(Number.isFinite);
-    if (!scores.length) return null;
-    return Math.max(...scores);
-  }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? Math.max(1, Math.min(5, Math.round(numeric))) : null;
-}
-
-function isObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isSelected(spot, slot) {
