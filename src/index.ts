@@ -83,6 +83,9 @@ interface DisplaySlot {
   wetsuit_label: string | null;
   wetsuit_thickness: string | null;
   wetsuit_note: string | null;
+  tide_height_m: number | null;
+  tide_trend: TideTrend | null;
+  tide_note: string | null;
 }
 
 interface TodayBestTimes {
@@ -247,6 +250,7 @@ interface ForecastBoard {
 }
 
 type ForecastWithoutAnalyst = Omit<ForecastBoard, "analyst">;
+type TodayTideSlot = TideFields & Pick<DisplaySlot, "label" | "time_range">;
 
 interface RawForecastData {
   marine: HourlyData;
@@ -441,7 +445,14 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/api/today") {
       const cached = await env.QEST_KV.get<unknown>(BOARD_KEY, "json");
-      return json(isRecord(cached) ? normalizeStoredBoard(cached) : FALLBACK_BOARD);
+      if (!isRecord(cached)) return json(FALLBACK_BOARD);
+      const board = normalizeStoredBoard(cached);
+      if (todayBoardHasTideData(board)) return json(board);
+      const enriched = await enrichTodayBoardWithTide(env, board);
+      if (todayBoardHasTideData(enriched)) {
+        await env.QEST_KV.put(BOARD_KEY, JSON.stringify(enriched));
+      }
+      return json(enriched);
     }
 
     if (request.method === "GET" && url.pathname === "/api/forecast") {
@@ -516,8 +527,9 @@ export default {
 async function refreshBoard(env: Env): Promise<TodayBoard> {
   const condition = await fetchConditions(env);
   const board = await runDify(env.DIFY_API_KEY, condition);
-  await env.QEST_KV.put(BOARD_KEY, JSON.stringify(board));
-  return board;
+  const boardWithTide = await enrichTodayBoardWithTide(env, board);
+  await env.QEST_KV.put(BOARD_KEY, JSON.stringify(boardWithTide));
+  return boardWithTide;
 }
 
 async function refreshForecast(env: Env): Promise<ForecastBoard> {
@@ -827,6 +839,121 @@ function isWaterSlot(value: unknown): value is TodayWaterSlot {
     typeof value.wetsuit_label === "string" &&
     typeof value.wetsuit_thickness === "string" &&
     typeof value.wetsuit_note === "string"
+  );
+}
+
+async function enrichTodayBoardWithTide(env: Env, board: TodayBoard): Promise<TodayBoard> {
+  const forecastDate = currentJapanDate();
+  const cached = await env.QEST_KV.get<unknown>(FORECAST_KEY, "json");
+  const cachedSlots = isRecord(cached) && isFreshForecastForToday(cached)
+    ? todayKugenumaTideSlots(cached, forecastDate)
+    : [];
+
+  if (cachedSlots.length) {
+    const enriched = applyTideFieldsToBoard(board, cachedSlots);
+    if (enriched.enrichedCount > 0) {
+      console.log("Today tide data injection", {
+        injected: true,
+        source: "forecast cache",
+        enrichedSlots: enriched.enrichedCount,
+      });
+      return enriched.board;
+    }
+  }
+
+  try {
+    const tide = await fetchTideData(1);
+    const freshSlots = buildTodayTideSlotsFromTide(tide, forecastDate);
+    const enriched = applyTideFieldsToBoard(board, freshSlots);
+    console.log("Today tide data injection", {
+      injected: enriched.enrichedCount > 0,
+      source: "fresh fetch",
+      enrichedSlots: enriched.enrichedCount,
+    });
+    return enriched.board;
+  } catch (error) {
+    console.error("Today tide fetch failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    console.log("Today tide data injection", {
+      injected: false,
+      source: "fresh fetch",
+      enrichedSlots: 0,
+    });
+    return withNullTideFields(board);
+  }
+}
+
+function todayKugenumaTideSlots(value: Record<string, unknown>, forecastDate: string): TodayTideSlot[] {
+  const days = Array.isArray(value.days) ? value.days : [];
+  const day = days.find((candidate) => isRecord(candidate) && candidate.date === forecastDate);
+  if (!isRecord(day) || !Array.isArray(day.spots)) return [];
+  const spot = day.spots.find((candidate) => isRecord(candidate) && candidate.spot_id === "kugenuma_main") ?? day.spots[0];
+  if (!isRecord(spot) || !Array.isArray(spot.slots)) return [];
+  return spot.slots.filter(isTideSlot);
+}
+
+function buildTodayTideSlotsFromTide(tide: HourlyData, forecastDate: string): TodayTideSlot[] {
+  return SLOT_DEFINITIONS.map((definition) => ({
+    label: definition.label,
+    time_range: displayTimeRange(definition.time_range),
+    ...tideForSlot(tide, forecastDate, definition),
+  }));
+}
+
+function applyTideFieldsToBoard(
+  board: TodayBoard,
+  tideSlots: TodayTideSlot[],
+): { board: TodayBoard; enrichedCount: number } {
+  let enrichedCount = 0;
+  const slots = board.slots.map((slot) => {
+    const match = tideSlots.find((candidate) =>
+      candidate.label === slot.label || displayTimeRange(candidate.time_range) === displayTimeRange(slot.time_range),
+    );
+    if (!match || match.tide_height_m === null || match.tide_trend === null) {
+      return {
+        ...slot,
+        ...emptyTideFields(),
+      };
+    }
+    enrichedCount += 1;
+    return {
+      ...slot,
+      tide_height_m: match.tide_height_m,
+      tide_trend: match.tide_trend,
+      tide_note: match.tide_note,
+    };
+  });
+  return {
+    board: {
+      ...board,
+      slots,
+    },
+    enrichedCount,
+  };
+}
+
+function withNullTideFields(board: TodayBoard): TodayBoard {
+  return {
+    ...board,
+    slots: board.slots.map((slot) => ({
+      ...slot,
+      ...emptyTideFields(),
+    })),
+  };
+}
+
+function todayBoardHasTideData(board: TodayBoard): boolean {
+  return board.slots.some((slot) => slot.tide_height_m !== null && slot.tide_trend !== null);
+}
+
+function isTideSlot(value: unknown): value is TodayTideSlot {
+  return (
+    isRecord(value) &&
+    typeof value.label === "string" &&
+    typeof value.time_range === "string" &&
+    typeof value.tide_height_m === "number" &&
+    asTideTrend(value.tide_trend) !== null
   );
 }
 
@@ -1967,6 +2094,9 @@ function normalizeDisplaySlots(value: unknown, fallbackSlots: ConditionSlotData[
       wetsuit_label: asOptionalString(raw.wetsuit_label, fallbackDisplay.wetsuit_label),
       wetsuit_thickness: asOptionalString(raw.wetsuit_thickness, fallbackDisplay.wetsuit_thickness),
       wetsuit_note: asOptionalString(raw.wetsuit_note, fallbackDisplay.wetsuit_note),
+      tide_height_m: optionalRounded(raw.tide_height_m, 2) ?? fallbackDisplay.tide_height_m,
+      tide_trend: asTideTrend(raw.tide_trend) ?? fallbackDisplay.tide_trend,
+      tide_note: asNullableString(raw.tide_note, fallbackDisplay.tide_note),
     };
   });
 }
@@ -2002,6 +2132,9 @@ function normalizeStoredDisplaySlots(value: unknown): DisplaySlot[] {
       wetsuit_label: asNullableString(raw.wetsuit_label, fallback.wetsuit_label),
       wetsuit_thickness: asNullableString(raw.wetsuit_thickness, fallback.wetsuit_thickness),
       wetsuit_note: asNullableString(raw.wetsuit_note, fallback.wetsuit_note),
+      tide_height_m: optionalRounded(raw.tide_height_m, 2) ?? fallback.tide_height_m,
+      tide_trend: asTideTrend(raw.tide_trend) ?? fallback.tide_trend,
+      tide_note: asNullableString(raw.tide_note, fallback.tide_note),
     };
   });
 }
@@ -2055,6 +2188,9 @@ function displaySlotFromCondition(slot: SlotData & Partial<TodayWaterFields>): D
     wetsuit_label: asNullableString(slot.wetsuit_label, null),
     wetsuit_thickness: asNullableString(slot.wetsuit_thickness, null),
     wetsuit_note: asNullableString(slot.wetsuit_note, null),
+    tide_height_m: null,
+    tide_trend: null,
+    tide_note: null,
   };
 }
 

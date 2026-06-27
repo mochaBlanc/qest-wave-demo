@@ -22,6 +22,9 @@ const elements = {
   waterNoteCard: document.querySelector("#water-note-card"),
   waterNoteSummary: document.querySelector("#water-note-summary"),
   wetsuitNoteSummary: document.querySelector("#wetsuit-note-summary"),
+  tideNoteCard: document.querySelector("#tide-note-card"),
+  tideNoteItems: document.querySelector("#tide-note-items"),
+  tideNoteSummary: document.querySelector("#tide-note-summary"),
   notice: document.querySelector("#notice"),
 };
 
@@ -86,6 +89,7 @@ function renderBoard(board) {
   elements.advancedBest.textContent = availableBestTime(state.slots, "experienced_index", board.best_advanced_time);
   elements.localNote.textContent = text(board.local_note);
   renderWaterNote(board);
+  renderTideNote(state.slots);
   elements.notice.textContent = text(board.notice);
   renderTags();
   renderTrend(board.trend, state.slots);
@@ -163,6 +167,31 @@ function renderWaterNote(board) {
   elements.wetsuitNoteSummary.hidden = !wetsuit;
   elements.waterNoteSummary.textContent = water;
   elements.wetsuitNoteSummary.textContent = wetsuit;
+}
+
+function renderTideNote(slots) {
+  const tideSlots = Array.isArray(slots) ? slots.filter(hasTide) : [];
+  elements.tideNoteCard.hidden = tideSlots.length === 0;
+  elements.tideNoteItems.replaceChildren();
+  elements.tideNoteSummary.hidden = true;
+  elements.tideNoteSummary.textContent = "";
+  if (!tideSlots.length) return;
+
+  elements.tideNoteItems.replaceChildren(...tideSlots.map((slot) => {
+    const item = document.createElement("div");
+    item.className = "tide-note-item";
+    item.innerHTML = `
+      <span>${escapeHtml(slot.label)}</span>
+      <strong>${escapeHtml(formatTide(slot))}</strong>
+    `;
+    return item;
+  }));
+
+  const noteSlot = tideSlots.find((slot) => !isPastSlot(slot) && slot.tide_note) ?? tideSlots.find((slot) => slot.tide_note);
+  if (noteSlot?.tide_note) {
+    elements.tideNoteSummary.hidden = false;
+    elements.tideNoteSummary.textContent = noteSlot.tide_note;
+  }
 }
 
 function availableBestTime(slots, key, fallback) {
@@ -308,6 +337,15 @@ function formatRain(value) {
 
 function formatTemp(value) {
   return value === null ? "—" : `${value.toFixed(1)}℃`;
+}
+
+function hasTide(slot) {
+  return Number.isFinite(Number(slot?.tide_height_m)) && typeof slot?.tide_trend === "string" && slot.tide_trend.trim() !== "";
+}
+
+function formatTide(slot) {
+  const height = Number(slot?.tide_height_m);
+  return `${height.toFixed(2)}m / ${slot.tide_trend}`;
 }
 
 function directionLabel(degrees) {
