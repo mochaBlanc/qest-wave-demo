@@ -959,7 +959,8 @@ h2 {
   line-height: 1.7;
 }
 
-.wetsuit-note {
+.wetsuit-note,
+.tide-note {
   margin: 10px 0 0;
   padding: 9px 10px;
   border-radius: 10px;

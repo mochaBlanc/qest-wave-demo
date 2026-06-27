@@ -41,7 +41,7 @@ interface SlotData {
   rule_longboard_score: number;
 }
 
-interface ForecastCondition extends SlotData {
+interface ForecastCondition extends SlotData, TideFields {
   water_temp_c: number;
   air_temp_c: number;
 }
@@ -169,6 +169,7 @@ interface TodayBoard {
 }
 
 type ForecastConfidence = "high" | "medium" | "low";
+type TideTrend = "上げ" | "下げ" | "満潮前後" | "干潮前後";
 
 interface ForecastSlot {
   label: string;
@@ -188,6 +189,9 @@ interface ForecastSlot {
   wetsuit_label: string;
   wetsuit_thickness: string;
   wetsuit_note: string;
+  tide_height_m: number | null;
+  tide_trend: TideTrend | null;
+  tide_note: string | null;
 }
 
 interface ForecastSpot {
@@ -249,6 +253,17 @@ interface RawForecastData {
   weather: HourlyData;
 }
 
+interface TideFields {
+  tide_height_m: number | null;
+  tide_trend: TideTrend | null;
+  tide_note: string | null;
+}
+
+interface TidePoint {
+  minutes: number;
+  height: number;
+}
+
 interface SpotDefinition {
   spot_id: string;
   spot_name: string;
@@ -291,6 +306,8 @@ interface CompactForecastSlotForAnalyst {
   };
   c?: string;
   wt: number;
+  th: number | null;
+  td: TideTrend | null;
 }
 
 interface CompactForecastSpotForAnalyst {
@@ -505,7 +522,22 @@ async function refreshBoard(env: Env): Promise<TodayBoard> {
 
 async function refreshForecast(env: Env): Promise<ForecastBoard> {
   const raw = await fetchRawForecastData(7);
-  const forecastBase = buildForecastBoard(raw);
+  const tide = await fetchTideData(7).catch((error: unknown) => {
+    console.error("Forecast tide fetch failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  });
+  const forecastBase = buildForecastBoard(raw, tide);
+  if (tide) {
+    console.log("Forecast tide data built", {
+      points: tidePointCount(tide),
+      slotsEnriched: forecastBase.days
+        .flatMap((day) => day.spots)
+        .flatMap((spot) => spot.slots)
+        .filter((slot) => slot.tide_height_m !== null || slot.tide_trend !== null).length,
+    });
+  }
   const analyst = await runDifyForecastAnalyst(env, forecastBase);
   const forecast: ForecastBoard = { ...forecastBase, analyst };
   await env.QEST_KV.put(FORECAST_KEY, JSON.stringify(forecast));
@@ -859,11 +891,20 @@ async function fetchRawForecastData(forecastDays: number): Promise<RawForecastDa
   };
 }
 
+async function fetchTideData(forecastDays: number): Promise<HourlyData> {
+  const tideUrl =
+    `https://marine-api.open-meteo.com/v1/marine?latitude=35.306&longitude=139.481&timezone=Asia%2FTokyo&forecast_days=${forecastDays}&hourly=sea_level_height_msl`;
+  const tideResponse = await fetchOpenMeteo(tideUrl, "Tide");
+  if (!tideResponse.hourly) throw new Error("Open-Meteo returned no tide hourly data");
+  return tideResponse.hourly;
+}
+
 function aggregateForecastSlot(
   definition: SlotDefinition,
   date: string,
   marine: HourlyData,
   weather: HourlyData,
+  tide: HourlyData | null = null,
 ): ForecastCondition {
   const slot = aggregateSlot(definition, date, marine, weather);
   const marineIndices = indicesForSlot(marine.time, date, definition);
@@ -875,7 +916,100 @@ function aggregateForecastSlot(
     ...slot,
     water_temp_c: round(waterTemp, 1),
     air_temp_c: round(airTemp, 1),
+    ...tideForSlot(tide, date, definition),
   };
+}
+
+function tideForSlot(tide: HourlyData | null, date: string, definition: SlotDefinition): TideFields {
+  if (!tide) return emptyTideFields();
+  const points = tidePointsForDate(tide, date);
+  if (!points.length) return emptyTideFields();
+  const midpoint = (definition.startMinutes + definition.endMinutes) / 2;
+  const height = tideHeightAt(points, midpoint);
+  if (height === null) return emptyTideFields();
+  const before = tideHeightAt(points, midpoint - 60);
+  const after = tideHeightAt(points, midpoint + 60);
+  const trend = classifyTideTrend(points, midpoint, height, before, after);
+  return {
+    tide_height_m: round(height, 2),
+    tide_trend: trend,
+    tide_note: tideNote(trend),
+  };
+}
+
+function emptyTideFields(): TideFields {
+  return {
+    tide_height_m: null,
+    tide_trend: null,
+    tide_note: null,
+  };
+}
+
+function tidePointsForDate(tide: HourlyData, date: string): TidePoint[] {
+  const heights = tide.sea_level_height_msl;
+  if (!Array.isArray(tide.time) || !Array.isArray(heights)) return [];
+  return tide.time
+    .map((time, index) => {
+      if (typeof time !== "string" || !time.startsWith(date)) return null;
+      const match = time.match(/T(\d{2}):(\d{2})/);
+      const height = Number(heights[index]);
+      if (!match || !Number.isFinite(height)) return null;
+      return {
+        minutes: Number(match[1]) * 60 + Number(match[2]),
+        height,
+      };
+    })
+    .filter((point): point is TidePoint => point !== null)
+    .sort((a, b) => a.minutes - b.minutes);
+}
+
+function tideHeightAt(points: TidePoint[], minutes: number): number | null {
+  const exact = points.find((point) => point.minutes === minutes);
+  if (exact) return exact.height;
+  const before = [...points].reverse().find((point) => point.minutes < minutes);
+  const after = points.find((point) => point.minutes > minutes);
+  if (!before || !after) return null;
+  const span = after.minutes - before.minutes;
+  if (span <= 0 || span > 120) return null;
+  const ratio = (minutes - before.minutes) / span;
+  return before.height + (after.height - before.height) * ratio;
+}
+
+function classifyTideTrend(
+  points: TidePoint[],
+  midpoint: number,
+  height: number,
+  before: number | null,
+  after: number | null,
+): TideTrend | null {
+  const window = points.filter((point) => Math.abs(point.minutes - midpoint) <= 120);
+  const tolerance = 0.05;
+  if (window.length >= 3) {
+    const max = Math.max(...window.map((point) => point.height));
+    const min = Math.min(...window.map((point) => point.height));
+    if (max - height <= tolerance) return "満潮前後";
+    if (height - min <= tolerance) return "干潮前後";
+  }
+  if (before === null || after === null) return null;
+  if (after > height && height > before) return "上げ";
+  if (after < height && height < before) return "下げ";
+  if (after > before + 0.02) return "上げ";
+  if (after < before - 0.02) return "下げ";
+  return null;
+}
+
+function tideNote(trend: TideTrend | null): string | null {
+  if (trend === "上げ") return "上げ潮。割れ方が変わりやすい時間帯です。";
+  if (trend === "下げ") return "下げ潮。浅くなる場所や流れに注意してください。";
+  if (trend === "満潮前後") return "満潮前後。割れにくさや戻りの流れを現地で確認してください。";
+  if (trend === "干潮前後") return "干潮前後。浅さと地形変化に注意してください。";
+  return null;
+}
+
+function tidePointCount(tide: HourlyData): number {
+  return Array.isArray(tide.sea_level_height_msl)
+    ? tide.sea_level_height_msl.map(Number).filter(Number.isFinite).length
+    : 0;
 }
 
 async function fetchOpenMeteo(url: string, label: string): Promise<OpenMeteoResponse> {
@@ -925,12 +1059,12 @@ function aggregateSlot(
   };
 }
 
-function buildForecastBoard(raw: RawForecastData): ForecastWithoutAnalyst {
+function buildForecastBoard(raw: RawForecastData, tide: HourlyData | null = null): ForecastWithoutAnalyst {
   const dates = uniqueDates(raw.marine.time).slice(0, 7);
   if (!dates.length) throw new Error("Open-Meteo returned no forecast dates");
 
   const days = dates.map((date, dayIndex) => {
-    const baselineSlots = SLOT_DEFINITIONS.map((definition) => aggregateForecastSlot(definition, date, raw.marine, raw.weather));
+    const baselineSlots = SLOT_DEFINITIONS.map((definition) => aggregateForecastSlot(definition, date, raw.marine, raw.weather, tide));
     const spots = FORECAST_SPOTS.map((spot) => ({
       spot_id: spot.spot_id,
       spot_name: spot.spot_name,
@@ -1008,25 +1142,37 @@ function forecastSlotForSpot(
     rain: baseline.rain_mm,
     weather: baseline.weather,
   });
+  let lessonIndex = danger ? 1 : clampScore(Math.round(lesson));
+  let beginnerIndex = danger ? 1 : clampScore(Math.round(beginner));
+  if (baseline.tide_trend === "干潮前後") {
+    if (lessonIndex >= 4) lessonIndex = clampScore(lessonIndex - 1);
+    if (beginnerIndex >= 4) beginnerIndex = clampScore(beginnerIndex - 1);
+  }
+  const tideCaution =
+    baseline.tide_trend === "干潮前後" || baseline.tide_trend === "満潮前後" ? baseline.tide_note : null;
+  const caution = appendCaution(forecastCaution(danger, rough, baseline, wave, wind, onshore), tideCaution);
 
   return {
     label: baseline.label,
     time_range: displayTimeRange(baseline.time_range),
     general_wave_index: clampScore(Math.round(general)),
-    lesson_index: danger ? 1 : clampScore(Math.round(lesson)),
-    beginner_index: danger ? 1 : clampScore(Math.round(beginner)),
+    lesson_index: lessonIndex,
+    beginner_index: beginnerIndex,
     longboard_index: clampScore(Math.round(danger ? longboard - 2 : longboard)),
     midlength_index: clampScore(Math.round(danger ? midlength - 1 : midlength)),
     shortboard_index: clampScore(Math.round(danger ? shortboard - 1 : shortboard)),
     advanced_index: clampScore(Math.round(danger ? advanced - 1 : advanced)),
     status: forecastStatus(danger, rough, lesson, general),
     message: forecastMessage(spot, baseline, wave, wind, onshore, higashihamaFallbackBoost > 0),
-    caution: forecastCaution(danger, rough, baseline, wave, wind, onshore),
+    caution,
     confidence,
     water_temp_c: baseline.water_temp_c,
     wetsuit_label: wetsuit.label,
     wetsuit_thickness: wetsuit.thickness,
     wetsuit_note: wetsuit.note,
+    tide_height_m: baseline.tide_height_m,
+    tide_trend: baseline.tide_trend,
+    tide_note: baseline.tide_note,
   };
 }
 
@@ -1183,6 +1329,13 @@ function forecastCaution(
   return rough ? "コンディション変化に注意してください。" : null;
 }
 
+function appendCaution(caution: string | null, note: string | null): string | null {
+  if (!note) return caution;
+  if (!caution) return note;
+  if (caution.includes(note)) return caution;
+  return `${caution} ${note}`;
+}
+
 function wetsuitRecommendation(
   waterTemp: number,
   condition: { airTemp: number; wind: number; rain: number; weather: string },
@@ -1239,7 +1392,7 @@ function normalizeStoredForecast(value: Record<string, unknown>): ForecastBoard 
     area: "鵠沼・江の島・鎌倉側",
     default_metric: "general_wave_index",
     tags: normalizeStringArray(value.tags, ["general", "lesson", "beginner", "longboard", "midlength", "shortboard", "advanced"]),
-    days: Array.isArray(value.days) ? (value.days as ForecastDay[]) : [],
+    days: normalizeStoredForecastDays(value.days),
     wetsuit_notice: asString(
       value.wetsuit_notice,
       "水温・気温・風・体感には個人差があります。寒がりの方やレッスンでは一段暖かめを選ぶと安心です。",
@@ -1250,6 +1403,47 @@ function normalizeStoredForecast(value: Record<string, unknown>): ForecastBoard 
       "この予測は気象・海況データと簡易ルールによる参考情報です。実際の海況は現地で確認してください。",
     ),
   };
+}
+
+function normalizeStoredForecastDays(value: unknown): ForecastDay[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isRecord).map((day) => ({
+    date: asString(day.date, ""),
+    weekday: asString(day.weekday, ""),
+    confidence: asForecastConfidence(day.confidence),
+    summary: asString(day.summary, ""),
+    spots: Array.isArray(day.spots)
+      ? day.spots.filter(isRecord).map((spot) => ({
+          spot_id: asString(spot.spot_id, ""),
+          spot_name: asString(spot.spot_name, ""),
+          area: asString(spot.area, ""),
+          slots: Array.isArray(spot.slots)
+            ? spot.slots.filter(isRecord).map((slot) => ({
+                label: asString(slot.label, ""),
+                time_range: asString(slot.time_range, ""),
+                general_wave_index: asScore(slot.general_wave_index, 1),
+                lesson_index: asScore(slot.lesson_index, 1),
+                beginner_index: asScore(slot.beginner_index, 1),
+                longboard_index: asScore(slot.longboard_index, 1),
+                midlength_index: asScore(slot.midlength_index, 1),
+                shortboard_index: asScore(slot.shortboard_index, 1),
+                advanced_index: asScore(slot.advanced_index, 1),
+                status: asString(slot.status, "まずまず"),
+                message: asString(slot.message, ""),
+                caution: asNullableString(slot.caution, null),
+                confidence: asForecastConfidence(slot.confidence),
+                water_temp_c: asNullableNumber(slot.water_temp_c, 0) ?? 0,
+                wetsuit_label: asString(slot.wetsuit_label, ""),
+                wetsuit_thickness: asString(slot.wetsuit_thickness, ""),
+                wetsuit_note: asString(slot.wetsuit_note, ""),
+                tide_height_m: optionalRounded(slot.tide_height_m, 2),
+                tide_trend: asTideTrend(slot.tide_trend),
+                tide_note: asNullableString(slot.tide_note, null),
+              }))
+            : [],
+        }))
+      : [],
+  }));
 }
 
 function normalizeStoredForecastAnalyst(value: unknown): ForecastAnalyst {
@@ -1447,6 +1641,8 @@ function compactForecastForAnalystInput(forecast: ForecastWithoutAnalyst): Compa
               adv: slot.advanced_index,
             },
             wt: slot.water_temp_c,
+            th: slot.tide_height_m,
+            td: slot.tide_trend,
           };
           if (slot.caution) compactSlot.c = slot.caution;
           return compactSlot;
@@ -2106,6 +2302,14 @@ function asNullableNumber(value: unknown, fallback: number | null): number | nul
   if (value === null) return null;
   const number = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(number) ? round(number, 1) : fallback;
+}
+
+function asForecastConfidence(value: unknown): ForecastConfidence {
+  return value === "high" || value === "medium" || value === "low" ? value : "low";
+}
+
+function asTideTrend(value: unknown): TideTrend | null {
+  return value === "上げ" || value === "下げ" || value === "満潮前後" || value === "干潮前後" ? value : null;
 }
 
 function asOptionalNumber(value: unknown, fallback: number | null): number | null {
