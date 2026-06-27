@@ -276,49 +276,42 @@ interface DifyResponse {
 }
 
 interface CompactForecastSlotForAnalyst {
-  label: string;
-  time_range: string;
-  general_wave_index: number;
-  lesson_index: number;
-  beginner_index: number;
-  longboard_index: number;
-  midlength_index: number;
-  shortboard_index: number;
-  advanced_index: number;
-  status: string;
-  message: string;
-  caution: string | null;
-  confidence: ForecastConfidence;
-  water_temp_c: number;
-  wetsuit_label: string;
-  wetsuit_thickness: string;
+  l: string;
+  t: string;
+  conf: ForecastConfidence;
+  st: string;
+  idx: {
+    g: number;
+    lesson: number;
+    beginner: number;
+    long: number;
+    mid: number;
+    short: number;
+    adv: number;
+  };
+  c?: string;
+  wt: number;
 }
 
 interface CompactForecastSpotForAnalyst {
-  spot_id: string;
-  spot_name: string;
+  id: string;
+  name: string;
   area: string;
   slots: CompactForecastSlotForAnalyst[];
 }
 
 interface CompactForecastDayForAnalyst {
-  date: string;
-  weekday: string;
-  confidence: ForecastConfidence;
-  summary: string;
+  d: string;
+  w: string;
+  conf: ForecastConfidence;
   spots: CompactForecastSpotForAnalyst[];
 }
 
 interface CompactForecastForAnalyst {
   updated_at: string;
-  brand: "BIG WAVE";
-  title: "湘南7日サーフィン予測";
   area: "鵠沼・江の島・鎌倉側";
-  default_metric: "general_wave_index";
-  tags: string[];
   days: CompactForecastDayForAnalyst[];
   wetsuit_notice: string;
-  notice: string;
 }
 
 const BOARD_KEY = "qest_today_board";
@@ -1383,8 +1376,16 @@ async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst
   }
 
   try {
-    const compactForecastForAnalyst = compactForecastForAnalystInput(forecast);
-    const forecastJsonText = JSON.stringify(compactForecastForAnalyst);
+    let compactForecastForAnalyst = compactForecastForAnalystInput(forecast);
+    let forecastJsonText = JSON.stringify(compactForecastForAnalyst);
+    if (forecastJsonText.length >= 20000) {
+      compactForecastForAnalyst = {
+        ...compactForecastForAnalyst,
+        days: compactForecastForAnalyst.days.slice(0, 5),
+      };
+      forecastJsonText = JSON.stringify(compactForecastForAnalyst);
+      console.log("Forecast analyst input trimmed to 5 days");
+    }
     console.log("Forecast analyst call started", {
       days: forecast.days.length,
       spots: forecast.days[0]?.spots.length ?? 0,
@@ -1421,42 +1422,38 @@ async function runDifyForecastAnalyst(env: Env, forecast: ForecastWithoutAnalyst
 function compactForecastForAnalystInput(forecast: ForecastWithoutAnalyst): CompactForecastForAnalyst {
   return {
     updated_at: forecast.updated_at,
-    brand: forecast.brand,
-    title: forecast.title,
     area: forecast.area,
-    default_metric: forecast.default_metric,
-    tags: forecast.tags,
     days: forecast.days.map((day) => ({
-      date: day.date,
-      weekday: day.weekday,
-      confidence: day.confidence,
-      summary: day.summary,
+      d: day.date,
+      w: day.weekday,
+      conf: day.confidence,
       spots: day.spots.map((spot) => ({
-        spot_id: spot.spot_id,
-        spot_name: spot.spot_name,
+        id: spot.spot_id,
+        name: spot.spot_name,
         area: spot.area,
-        slots: spot.slots.map((slot) => ({
-          label: slot.label,
-          time_range: slot.time_range,
-          general_wave_index: slot.general_wave_index,
-          lesson_index: slot.lesson_index,
-          beginner_index: slot.beginner_index,
-          longboard_index: slot.longboard_index,
-          midlength_index: slot.midlength_index,
-          shortboard_index: slot.shortboard_index,
-          advanced_index: slot.advanced_index,
-          status: slot.status,
-          message: slot.message,
-          caution: slot.caution,
-          confidence: slot.confidence,
-          water_temp_c: slot.water_temp_c,
-          wetsuit_label: slot.wetsuit_label,
-          wetsuit_thickness: slot.wetsuit_thickness,
-        })),
+        slots: spot.slots.map((slot) => {
+          const compactSlot: CompactForecastSlotForAnalyst = {
+            l: slot.label,
+            t: slot.time_range,
+            conf: slot.confidence,
+            st: slot.status,
+            idx: {
+              g: slot.general_wave_index,
+              lesson: slot.lesson_index,
+              beginner: slot.beginner_index,
+              long: slot.longboard_index,
+              mid: slot.midlength_index,
+              short: slot.shortboard_index,
+              adv: slot.advanced_index,
+            },
+            wt: slot.water_temp_c,
+          };
+          if (slot.caution) compactSlot.c = slot.caution;
+          return compactSlot;
+        }),
       })),
     })),
     wetsuit_notice: forecast.wetsuit_notice,
-    notice: forecast.notice,
   };
 }
 
