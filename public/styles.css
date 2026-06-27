@@ -626,6 +626,39 @@ h2 {
   font-size: 12px !important;
 }
 
+.live-check-card {
+  display: grid;
+  gap: 5px;
+}
+
+.live-check-link {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+  text-decoration-color: rgba(37, 111, 134, 0.35);
+  text-underline-offset: 3px;
+}
+
+.live-check-link:hover {
+  color: var(--ocean);
+}
+
+.live-check-provider,
+.live-check-description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.live-check-provider {
+  color: var(--muted) !important;
+}
+
+.live-check-description {
+  color: var(--navy) !important;
+}
+
 .notice {
   padding: 2px 4px 0;
 }
