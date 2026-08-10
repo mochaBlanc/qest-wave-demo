@@ -11,7 +11,7 @@
   "kv_namespaces": [
     {
       "binding": "QEST_KV",
-      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+      "id": "3ce1eca14c194649ae1ceb8e1edfc0b1"
     }
   ],
   "triggers": {
