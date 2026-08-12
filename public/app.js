@@ -22,9 +22,6 @@ const elements = {
   waterNoteCard: document.querySelector("#water-note-card"),
   waterNoteSummary: document.querySelector("#water-note-summary"),
   wetsuitNoteSummary: document.querySelector("#wetsuit-note-summary"),
-  tideNoteCard: document.querySelector("#tide-note-card"),
-  tideNoteItems: document.querySelector("#tide-note-items"),
-  tideNoteSummary: document.querySelector("#tide-note-summary"),
   notice: document.querySelector("#notice"),
 };
 
@@ -89,7 +86,6 @@ function renderBoard(board) {
   elements.advancedBest.textContent = availableBestTime(state.slots, "experienced_index", board.best_advanced_time);
   elements.localNote.textContent = text(board.local_note);
   renderWaterNote(board);
-  renderTideNote(state.slots);
   elements.notice.textContent = text(board.notice);
   renderTags();
   renderTrend(board.trend, state.slots);
@@ -169,31 +165,6 @@ function renderWaterNote(board) {
   elements.wetsuitNoteSummary.textContent = wetsuit;
 }
 
-function renderTideNote(slots) {
-  const tideSlots = Array.isArray(slots) ? slots.filter(hasTide) : [];
-  elements.tideNoteCard.hidden = tideSlots.length === 0;
-  elements.tideNoteItems.replaceChildren();
-  elements.tideNoteSummary.hidden = true;
-  elements.tideNoteSummary.textContent = "";
-  if (!tideSlots.length) return;
-
-  elements.tideNoteItems.replaceChildren(...tideSlots.map((slot) => {
-    const item = document.createElement("div");
-    item.className = "tide-note-item";
-    item.innerHTML = `
-      <span>${escapeHtml(slot.label)}</span>
-      <strong>${escapeHtml(formatTide(slot))}</strong>
-    `;
-    return item;
-  }));
-
-  const noteSlot = tideSlots.find((slot) => !isPastSlot(slot) && slot.tide_note) ?? tideSlots.find((slot) => slot.tide_note);
-  if (noteSlot?.tide_note) {
-    elements.tideNoteSummary.hidden = false;
-    elements.tideNoteSummary.textContent = noteSlot.tide_note;
-  }
-}
-
 function availableBestTime(slots, key, fallback) {
   const available = slots.filter((slot) => !isPastSlot(slot));
   if (!available.length) return "本日は終了";
@@ -212,22 +183,22 @@ function renderTrend(trend, slots) {
   const directions = numericSeries(trend?.wind_direction_deg, labels.length);
   const rain = numericSeries(trend?.rain_mm, labels.length);
   const water = waterTempSeries(trend, slots, labels);
-  const tides = tideHeightSeries(slots, labels);
-  const tideTrends = tideTrendSeries(slots, labels);
+  const tides = tideHeightSeries(trend, slots, labels);
+  const tideTrends = tideDirectionLabels(tides);
   const rows = [
-    hasValues(waves) ? trendStripRow("波", `
-      <div class="trend-cell-grid trend-meter-grid">${waves.map((value) => verticalMeterCell(value, waves, formatMeters, "wave")).join("")}</div>
+    hasValues(waves) ? trendStripRow("波高（m）", `
+      <div class="trend-cell-grid trend-meter-grid">${waves.map((value) => verticalMeterCell(value, waves, (item) => formatNumber(item, 1), "wave")).join("")}</div>
     `) : "",
-    hasValues(speeds) || hasValues(directions) ? trendStripRow("風", `
+    hasValues(speeds) || hasValues(directions) ? trendStripRow("風速（m/s）", `
       <div class="trend-cell-grid">${labels.map((_, index) => windMeterCell(speeds[index], directions[index], speeds)).join("")}</div>
     `) : "",
-    hasValues(rain) ? trendStripRow("雨", `
-      <div class="trend-cell-grid trend-meter-grid">${rain.map((value) => verticalMeterCell(value, rain, formatRain, "rain")).join("")}</div>
+    hasValues(rain) ? trendStripRow("雨（mm）", `
+      <div class="trend-cell-grid trend-meter-grid">${rain.map((value) => verticalMeterCell(value, rain, (item) => formatNumber(item, 1), "rain")).join("")}</div>
     `) : "",
-    hasValues(water) ? trendStripRow("水温", `
-      <div class="trend-cell-grid">${water.map((value) => trendMetric(formatTemp(value))).join("")}</div>
+    hasValues(water) ? trendStripRow("水温（℃）", `
+      <div class="trend-cell-grid">${water.map((value) => trendMetric(formatNumber(value, 1))).join("")}</div>
     `) : "",
-    hasValues(tides) ? trendStripRow("潮", tideTrendChart(tides, tideTrends)) : "",
+    hasValues(tides) ? trendStripRow("潮位（m）", tideTrendChart(tides, tideTrends)) : "",
   ].filter(Boolean);
 
   elements.trendSection.hidden = rows.length === 0;
@@ -238,12 +209,17 @@ function renderTrend(trend, slots) {
 
   const card = document.createElement("article");
   card.className = "trend-strip-card";
+  const minimumWidth = Math.max(680, 108 + labels.length * 58);
   card.innerHTML = `
-    <div class="trend-time-row">
-      <span></span>
-      ${labels.map((label) => `<strong>${escapeHtml(label)}</strong>`).join("")}
+    <div class="trend-scroll" tabindex="0" aria-label="00時から23時までの海況推移。横にスクロールできます">
+      <div class="trend-strip-inner" style="--trend-columns: ${labels.length}; min-width: ${minimumWidth}px">
+        <div class="trend-time-row">
+          <span>時刻</span>
+          ${labels.map((label) => `<strong${isCurrentTrendHour(label) ? ' class="current"' : ""}>${escapeHtml(label)}</strong>`).join("")}
+        </div>
+        ${rows.join("")}
+      </div>
     </div>
-    ${rows.join("")}
   `;
   elements.trendGrid.replaceChildren(card);
 }
@@ -268,11 +244,16 @@ function verticalMeterCell(value, series, formatter, tone) {
 }
 
 function windMeterCell(speed, direction, series) {
-  const width = proportionalPercent(speed, series, 10);
+  const strength = proportionalPercent(speed, series, 28);
+  const angle = direction === null ? 0 : ((direction % 360) + 360) % 360;
   return `
     <span class="wind-meter-cell">
-      <span class="horizontal-meter"><span class="meter-fill" style="width: ${width}%"></span></span>
-      <strong>${escapeHtml(formatSpeed(speed))}</strong>
+      ${direction === null ? '<span class="wind-vane unavailable">—</span>' : `
+        <svg class="wind-vane" viewBox="0 0 24 24" aria-hidden="true" style="transform: rotate(${angle}deg); opacity: ${strength / 100}">
+          <path d="M12 2 L17 10 L13.5 9 L13.5 21 L10.5 21 L10.5 9 L7 10 Z"></path>
+        </svg>
+      `}
+      <strong>${escapeHtml(formatNumber(speed, 1))}</strong>
       ${direction !== null ? `<em>${escapeHtml(directionLabel(direction))}</em>` : ""}
     </span>
   `;
@@ -287,20 +268,18 @@ function tideTrendChart(tides, trends) {
   const min = Math.min(...valid);
   const max = Math.max(...valid);
   const range = Math.max(max - min, 0.1);
-  const points = tides.map((value, index) => {
-    const x = 12.5 + index * 25;
-    const y = value === null ? 50 : 48 - ((value - min) / range) * 34;
-    return `${x},${y}`;
-  }).join(" ");
+  const lines = tidePolylineSegments(tides, min, range)
+    .map((points) => `<polyline points="${points}" vector-effect="non-scaling-stroke"></polyline>`)
+    .join("");
   return `
     <div class="trend-tide-chart">
       <svg viewBox="0 0 100 58" preserveAspectRatio="none" aria-hidden="true">
-        <polyline points="${points}" vector-effect="non-scaling-stroke"></polyline>
+        ${lines}
       </svg>
       <div class="trend-tide-values">
         ${tides.map((value, index) => `
           <span>
-            <strong>${escapeHtml(value === null ? "—" : `${value.toFixed(2)}m`)}</strong>
+            <strong>${escapeHtml(value === null ? "—" : value.toFixed(2))}</strong>
             ${trends[index] ? `<em>${escapeHtml(trends[index])}</em>` : ""}
           </span>
         `).join("")}
@@ -309,7 +288,27 @@ function tideTrendChart(tides, trends) {
   `;
 }
 
-function tideHeightSeries(slots, labels) {
+function tidePolylineSegments(tides, min, range) {
+  const segments = [];
+  let current = [];
+  tides.forEach((value, index) => {
+    if (value === null) {
+      if (current.length > 1) segments.push(current.join(" "));
+      current = [];
+      return;
+    }
+    const x = ((index + 0.5) / tides.length) * 100;
+    const y = 48 - ((value - min) / range) * 34;
+    current.push(`${x},${y}`);
+  });
+  if (current.length > 1) segments.push(current.join(" "));
+  return segments;
+}
+
+function tideHeightSeries(trend, slots, labels) {
+  const trendValues = numericSeries(trend?.tide_height_m, labels.length);
+  if (hasValues(trendValues)) return trendValues;
+  if (labels.length > 4) return Array.from({ length: labels.length }, () => null);
   return labels.map((label) => {
     const slot = Array.isArray(slots) ? slots.find((item) => item.label === label) : null;
     if (slot?.tide_height_m === null || slot?.tide_height_m === undefined || slot?.tide_height_m === "") return null;
@@ -318,10 +317,15 @@ function tideHeightSeries(slots, labels) {
   });
 }
 
-function tideTrendSeries(slots, labels) {
-  return labels.map((label) => {
-    const slot = Array.isArray(slots) ? slots.find((item) => item.label === label) : null;
-    return typeof slot?.tide_trend === "string" ? slot.tide_trend : "";
+function tideDirectionLabels(tides) {
+  return tides.map((value, index) => {
+    if (value === null) return "";
+    const before = tides[index - 1];
+    const after = tides[index + 1];
+    if (before !== null && after !== null && value >= before && value >= after) return "満潮前後";
+    if (before !== null && after !== null && value <= before && value <= after) return "干潮前後";
+    const comparison = after !== null && after !== undefined ? after - value : before !== null && before !== undefined ? value - before : 0;
+    return comparison > 0.005 ? "上げ" : comparison < -0.005 ? "下げ" : "";
   });
 }
 
@@ -329,7 +333,11 @@ function trendLabels(trend) {
   const labels = Array.isArray(trend?.labels) && trend.labels.length
     ? trend.labels
     : ["早朝", "午前", "午後", "夕方"];
-  return labels.slice(0, 4).map((label) => text(label));
+  return labels.slice(0, 24).map((label) => text(label));
+}
+
+function isCurrentTrendHour(label) {
+  return /^\d{2}$/.test(label) && Number(label) === Number(jstParts().hour);
 }
 
 function numericSeries(values, length) {
@@ -368,30 +376,8 @@ function validWaterTemp(value) {
   return Number.isFinite(number) && number > 0 && number < 40 ? number : null;
 }
 
-function formatMeters(value) {
-  return value === null ? "—" : `${value.toFixed(1)}m`;
-}
-
-function formatSpeed(value) {
-  return value === null ? "—" : `${value.toFixed(1)}m/s`;
-}
-
-function formatRain(value) {
-  if (value === null) return "—";
-  return `${value.toFixed(1)}mm`;
-}
-
-function formatTemp(value) {
-  return value === null ? "—" : `${value.toFixed(1)}℃`;
-}
-
-function hasTide(slot) {
-  return Number.isFinite(Number(slot?.tide_height_m)) && typeof slot?.tide_trend === "string" && slot.tide_trend.trim() !== "";
-}
-
-function formatTide(slot) {
-  const height = Number(slot?.tide_height_m);
-  return `${height.toFixed(2)}m / ${slot.tide_trend}`;
+function formatNumber(value, digits) {
+  return value === null ? "—" : value.toFixed(digits);
 }
 
 function directionLabel(degrees) {

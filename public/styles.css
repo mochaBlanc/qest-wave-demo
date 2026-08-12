@@ -297,18 +297,35 @@ h1 {
 }
 
 .trend-strip-card {
-  display: grid;
-  gap: 0;
   overflow: hidden;
   border: 1px solid rgba(24, 49, 60, 0.08);
   border-radius: 12px;
   background: #fff;
 }
 
+.trend-scroll {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: rgba(37, 111, 134, 0.32) transparent;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.trend-scroll:focus-visible {
+  outline: 2px solid rgba(37, 111, 134, 0.4);
+  outline-offset: -2px;
+}
+
+.trend-strip-inner {
+  --trend-columns: 4;
+  display: grid;
+  gap: 0;
+}
+
 .trend-time-row,
 .trend-strip-row {
   display: grid;
-  grid-template-columns: 46px repeat(4, minmax(0, 1fr));
+  grid-template-columns: 102px repeat(var(--trend-columns), minmax(58px, 1fr));
   align-items: center;
 }
 
@@ -324,6 +341,32 @@ h1 {
   text-align: center;
 }
 
+.trend-time-row > span,
+.trend-strip-row > .trend-label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-right: 1px solid rgba(24, 49, 60, 0.08);
+  background: #fbf8f1;
+}
+
+.trend-time-row > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.trend-time-row strong.current {
+  padding: 4px 0;
+  border-radius: 7px;
+  background: var(--ocean);
+  color: #fff;
+}
+
 .trend-strip-row {
   min-height: 48px;
   border-bottom: 1px solid rgba(24, 49, 60, 0.06);
@@ -333,17 +376,13 @@ h1 {
   border-bottom: 0;
 }
 
-.trend-strip-row .trend-label {
-  padding-left: 10px;
-}
-
 .trend-cell-grid {
-  grid-column: span 4;
+  grid-column: span var(--trend-columns);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--trend-columns), minmax(58px, 1fr));
   align-items: center;
-  gap: 7px;
-  padding: 7px 8px;
+  gap: 0;
+  padding: 7px 0;
 }
 
 .trend-meter-grid {
@@ -356,6 +395,7 @@ h1 {
   display: grid;
   justify-items: center;
   min-width: 0;
+  padding: 0 4px;
 }
 
 .trend-metric {
@@ -391,13 +431,13 @@ h1 {
   align-items: end;
   justify-content: center;
   width: 100%;
-  height: 34px;
+  height: 48px;
   border-bottom: 1px solid rgba(24, 49, 60, 0.12);
 }
 
 .vertical-meter .meter-fill {
   display: block;
-  width: min(22px, 60%);
+  width: min(28px, 62%);
   min-height: 4px;
   border-radius: 4px 4px 2px 2px;
   background: var(--ocean);
@@ -407,28 +447,29 @@ h1 {
   background: #7fa8b7;
 }
 
-.horizontal-meter {
-  display: block;
-  width: 100%;
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #edf2f1;
+.wind-vane {
+  width: 24px;
+  height: 24px;
+  color: var(--ocean);
+  transform-origin: center;
 }
 
-.horizontal-meter .meter-fill {
-  display: block;
-  height: 100%;
-  min-width: 4px;
-  border-radius: inherit;
-  background: var(--ocean);
+.wind-vane path {
+  fill: currentColor;
+}
+
+.wind-vane.unavailable {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .trend-tide-chart {
   position: relative;
-  grid-column: span 4;
-  min-height: 68px;
-  margin: 4px 8px 7px;
+  grid-column: span var(--trend-columns);
+  min-height: 86px;
+  margin: 5px 0 7px;
 }
 
 .trend-tide-chart svg {
@@ -451,7 +492,7 @@ h1 {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--trend-columns), minmax(58px, 1fr));
   align-items: end;
 }
 
@@ -640,46 +681,6 @@ h2 {
 .water-note-card {
   display: grid;
   gap: 7px;
-}
-
-.tide-note-card {
-  display: grid;
-  gap: 8px;
-}
-
-.tide-note-items {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-}
-
-.tide-note-item {
-  padding: 8px 9px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-}
-
-.tide-note-item span,
-.tide-note-item strong {
-  display: block;
-}
-
-.tide-note-item span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.tide-note-item strong {
-  margin-top: 2px;
-  color: var(--navy);
-  font-size: 12px;
-}
-
-.tide-note-summary {
-  color: var(--muted) !important;
-  font-size: 12px !important;
 }
 
 .live-check-card {
@@ -1211,11 +1212,12 @@ h2 {
 
   .slots-section {
     grid-column: 1;
-    grid-row: 1 / span 8;
+    grid-row: 2 / span 8;
   }
 
   .trend-section {
-    grid-column: 2;
+    grid-column: 1 / -1;
+    grid-row: 1;
   }
 
   .notice {

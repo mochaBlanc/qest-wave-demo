@@ -116,6 +116,7 @@ interface TodayTrend {
   wind_direction_deg?: Array<number | null>;
   rain_mm?: Array<number | null>;
   water_temp_c?: Array<number | null>;
+  tide_height_m?: Array<number | null>;
 }
 
 interface ConditionData {
@@ -446,13 +447,26 @@ export default {
     if (request.method === "GET" && url.pathname === "/api/today") {
       const cached = await env.QEST_KV.get<unknown>(BOARD_KEY, "json");
       if (!isRecord(cached)) return json(FALLBACK_BOARD);
-      const board = normalizeStoredBoard(cached);
-      if (todayBoardHasTideData(board)) return json(board);
-      const enriched = await enrichTodayBoardWithTide(env, board);
-      if (todayBoardHasTideData(enriched)) {
-        await env.QEST_KV.put(BOARD_KEY, JSON.stringify(enriched));
+      let board = normalizeStoredBoard(cached);
+      let changed = false;
+      if (!todayBoardHasHourlyTrend(board)) {
+        try {
+          board = await enrichTodayBoardWithHourlyTrend(board);
+          changed = true;
+        } catch (error) {
+          console.error("Today hourly trend refresh failed; cached trend preserved", {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
-      return json(enriched);
+      if (!todayBoardHasTideData(board)) {
+        board = await enrichTodayBoardWithTide(env, board);
+        changed = true;
+      }
+      if (changed) {
+        await env.QEST_KV.put(BOARD_KEY, JSON.stringify(board));
+      }
+      return json(board);
     }
 
     if (request.method === "GET" && url.pathname === "/api/forecast") {
@@ -557,7 +571,8 @@ async function refreshForecast(env: Env): Promise<ForecastBoard> {
 }
 
 async function fetchConditions(env: Env): Promise<ConditionData> {
-  const { marine, weather } = await fetchRawForecastData(1);
+  const raw = await fetchRawForecastData(1);
+  const { marine, weather } = raw;
   const forecastDate = String(marine.time[0] ?? weather.time[0] ?? "").slice(0, 10);
   if (!forecastDate) throw new Error("Open-Meteo returned no forecast date");
 
@@ -577,7 +592,7 @@ async function fetchConditions(env: Env): Promise<ConditionData> {
     best_times: bestTimes,
     water_temp_summary: null,
     wetsuit_summary: null,
-    trend: buildTodayTrend(slots),
+    trend: buildHourlyTodayTrend(raw, forecastDate),
     slots,
   };
   console.log("Today condition index enrichment", {
@@ -823,7 +838,7 @@ function applyWaterFieldsToCondition(
       ...condition,
       water_temp_summary: waterTempSummary(slots),
       wetsuit_summary: wetsuitSummary(slots),
-      trend: buildTodayTrend(slots, true),
+      trend: condition.trend,
       slots,
     },
     enrichedCount,
@@ -857,7 +872,7 @@ async function enrichTodayBoardWithTide(env: Env, board: TodayBoard): Promise<To
         source: "forecast cache",
         enrichedSlots: enriched.enrichedCount,
       });
-      return enriched.board;
+      board = enriched.board;
     }
   }
 
@@ -865,12 +880,16 @@ async function enrichTodayBoardWithTide(env: Env, board: TodayBoard): Promise<To
     const tide = await fetchTideData(1);
     const freshSlots = buildTodayTideSlotsFromTide(tide, forecastDate);
     const enriched = applyTideFieldsToBoard(board, freshSlots);
+    const boardWithHourlyTide: TodayBoard = {
+      ...enriched.board,
+      trend: addHourlyTideToTrend(enriched.board.trend, tide, forecastDate),
+    };
     console.log("Today tide data injection", {
       injected: enriched.enrichedCount > 0,
       source: "fresh fetch",
       enrichedSlots: enriched.enrichedCount,
     });
-    return enriched.board;
+    return boardWithHourlyTide;
   } catch (error) {
     console.error("Today tide fetch failed", {
       message: error instanceof Error ? error.message : String(error),
@@ -880,8 +899,28 @@ async function enrichTodayBoardWithTide(env: Env, board: TodayBoard): Promise<To
       source: "fresh fetch",
       enrichedSlots: 0,
     });
-    return withNullTideFields(board);
+    return todayBoardHasTideData(board) ? board : withNullTideFields(board);
   }
+}
+
+async function enrichTodayBoardWithHourlyTrend(board: TodayBoard): Promise<TodayBoard> {
+  const raw = await fetchRawForecastData(1);
+  const forecastDate = String(raw.marine.time[0] ?? raw.weather.time[0] ?? "").slice(0, 10);
+  if (!forecastDate) throw new Error("Open-Meteo returned no forecast date for today trend");
+  const tide = await fetchTideData(1).catch((error: unknown) => {
+    console.error("Today hourly tide fetch failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  });
+  const trend = buildHourlyTodayTrend(raw, forecastDate, tide);
+  const tideSlots = tide ? buildTodayTideSlotsFromTide(tide, forecastDate) : [];
+  const enriched = tideSlots.length ? applyTideFieldsToBoard(board, tideSlots).board : board;
+  console.log("Today hourly trend built", {
+    points: trend.labels.length,
+    hasTide: Boolean(trend.tide_height_m?.some((value) => value !== null)),
+  });
+  return { ...enriched, trend };
 }
 
 function todayKugenumaTideSlots(value: Record<string, unknown>, forecastDate: string): TodayTideSlot[] {
@@ -947,6 +986,10 @@ function todayBoardHasTideData(board: TodayBoard): boolean {
   return board.slots.some((slot) => slot.tide_height_m !== null && slot.tide_trend !== null);
 }
 
+function todayBoardHasHourlyTrend(board: TodayBoard): boolean {
+  return board.trend.labels.length >= 20 && (board.trend.wave_height_m?.length ?? 0) >= 20;
+}
+
 function isTideSlot(value: unknown): value is TodayTideSlot {
   return (
     isRecord(value) &&
@@ -996,6 +1039,41 @@ function buildTodayTrend(slots: Array<SlotData & Partial<TodayWaterFields>>, log
     });
   }
   return trend;
+}
+
+function buildHourlyTodayTrend(raw: RawForecastData, forecastDate: string, tide: HourlyData | null = null): TodayTrend {
+  const hours = Array.from({ length: 24 }, (_, hour) => hour.toString().padStart(2, "0"));
+  const trend: TodayTrend = {
+    labels: hours,
+    time_ranges: hours.map((hour) => `${hour}:00`),
+    wave_height_m: hours.map((hour) => hourlyTrendValue(raw.marine, "wave_height", forecastDate, hour, 2)),
+    wind_speed_ms: hours.map((hour) => hourlyTrendValue(raw.weather, "wind_speed_10m", forecastDate, hour, 1)),
+    wind_direction_deg: hours.map((hour) => hourlyTrendValue(raw.weather, "wind_direction_10m", forecastDate, hour, 0)),
+    rain_mm: hours.map((hour) => hourlyTrendValue(raw.weather, "precipitation", forecastDate, hour, 1)),
+  };
+  const water = hours.map((hour) => hourlyTrendValue(raw.marine, "sea_surface_temperature", forecastDate, hour, 1));
+  if (water.some((value) => value !== null)) trend.water_temp_c = water;
+  if (tide) trend.tide_height_m = hours.map((hour) => hourlyTrendValue(tide, "sea_level_height_msl", forecastDate, hour, 2));
+  return trend;
+}
+
+function addHourlyTideToTrend(trend: TodayTrend, tide: HourlyData, forecastDate: string): TodayTrend {
+  if (trend.labels.length < 20) return trend;
+  const tideHeights = trend.labels.map((label) => hourlyTrendValue(tide, "sea_level_height_msl", forecastDate, label.slice(0, 2), 2));
+  return tideHeights.some((value) => value !== null) ? { ...trend, tide_height_m: tideHeights } : trend;
+}
+
+function hourlyTrendValue(
+  hourly: HourlyData,
+  field: string,
+  forecastDate: string,
+  hour: string,
+  digits: number,
+): number | null {
+  const index = hourly.time.indexOf(`${forecastDate}T${hour}:00`);
+  if (index < 0) return null;
+  const values = hourly[field];
+  return Array.isArray(values) ? optionalRounded(values[index], digits) : null;
 }
 
 async function fetchRawForecastData(forecastDays: number): Promise<RawForecastData> {
@@ -2153,11 +2231,13 @@ function normalizeStoredTrend(value: unknown, fallback: TodayTrend): TodayTrend 
   const windDirection = normalizeNumberArray(raw.wind_direction_deg, fallback.wind_direction_deg, length, 0);
   const rain = normalizeNumberArray(raw.rain_mm, fallback.rain_mm, length, 1);
   const water = normalizeNumberArray(raw.water_temp_c, fallback.water_temp_c, length, 1);
+  const tide = normalizeNumberArray(raw.tide_height_m, fallback.tide_height_m, length, 2);
   if (wave) trend.wave_height_m = wave;
   if (wind) trend.wind_speed_ms = wind;
   if (windDirection) trend.wind_direction_deg = windDirection;
   if (rain) trend.rain_mm = rain;
   if (water?.some((item) => item !== null)) trend.water_temp_c = water;
+  if (tide?.some((item) => item !== null)) trend.tide_height_m = tide;
   return trend;
 }
 
