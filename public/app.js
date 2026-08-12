@@ -48,8 +48,8 @@ const state = {
 };
 
 const windyMaps = {
-  waves: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=4&overlay=waves&product=ecmwfWaves&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
-  wind: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=4&overlay=wind&product=ecmwf&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
+  waves: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=12&overlay=waves&product=ecmwfWaves&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
+  wind: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=12&overlay=wind&product=ecmwf&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
 };
 
 async function loadBoard() {
@@ -214,7 +214,7 @@ function renderTrend(trend, slots) {
 
   const card = document.createElement("article");
   card.className = "trend-strip-card";
-  const minimumWidth = Math.max(680, 108 + labels.length * 58);
+  const minimumWidth = Math.max(680, 108 + labels.length * 92);
   card.innerHTML = `
     <div class="trend-scroll" tabindex="0" aria-label="00時から23時までの海況推移。横にスクロールできます">
       <div class="trend-strip-inner" style="--trend-columns: ${labels.length}; min-width: ${minimumWidth}px">
@@ -227,6 +227,18 @@ function renderTrend(trend, slots) {
     </div>
   `;
   elements.trendGrid.replaceChildren(card);
+  setInitialTrendHour(card, labels, "09");
+}
+
+function setInitialTrendHour(card, labels, startHour) {
+  const hourIndex = labels.indexOf(startHour);
+  const scroll = card.querySelector(".trend-scroll");
+  if (hourIndex < 0 || !scroll) return;
+  requestAnimationFrame(() => {
+    const firstHourCell = scroll.querySelector(".trend-time-row strong");
+    if (!firstHourCell) return;
+    scroll.scrollLeft = hourIndex * firstHourCell.getBoundingClientRect().width;
+  });
 }
 
 function trendStripRow(label, bodyHtml) {
