@@ -581,29 +581,66 @@ function escapeHtml(value) {
 function initLiveStreams() {
   document.querySelectorAll("video[data-hls-src]").forEach((video) => {
     const source = video.dataset.hlsSrc;
-    const status = video.closest(".live-check-camera")?.querySelector(".live-check-status");
-    if (!source) return;
+    const camera = video.closest(".live-check-camera");
+    const status = camera?.querySelector(".live-check-status");
+    const playButton = camera?.querySelector(".live-play-button");
+    if (!source || !playButton) return;
 
-    if (window.Hls?.isSupported()) {
-      const hls = new window.Hls();
-      hls.loadSource(source);
-      hls.attachMedia(video);
-      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-        if (status) status.textContent = "再生ボタンを押してライブ映像を確認";
-      });
-      hls.on(window.Hls.Events.ERROR, (_event, data) => {
-        if (data?.fatal && status) status.textContent = "映像を読み込めません。配信元リンクをご利用ください。";
-      });
-      window.addEventListener("pagehide", () => hls.destroy(), { once: true });
-      return;
-    }
+    let hls = null;
+    const showFailure = () => {
+      playButton.hidden = false;
+      playButton.disabled = false;
+      playButton.textContent = "もう一度試す";
+      if (status) status.textContent = "映像を読み込めません。配信元リンクもご利用いただけます。";
+    };
+    const requestPlayback = async () => {
+      try {
+        await video.play();
+        playButton.hidden = true;
+        if (status) status.textContent = "ライブ映像を再生中";
+      } catch (error) {
+        console.error("Live camera playback failed", error);
+        showFailure();
+      }
+    };
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = source;
-      return;
-    }
+    playButton.addEventListener("click", () => {
+      playButton.disabled = true;
+      playButton.textContent = "読み込み中…";
+      if (status) status.textContent = "ライブ映像を読み込んでいます…";
 
-    if (status) status.textContent = "このブラウザでは再生できません。配信元リンクをご利用ください。";
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        if (!video.src) video.src = source;
+        void requestPlayback();
+        return;
+      }
+
+      if (window.Hls?.isSupported()) {
+        if (!hls) {
+          hls = new window.Hls({ enableWorker: true, lowLatencyMode: true });
+          hls.on(window.Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(source));
+          hls.on(window.Hls.Events.MANIFEST_PARSED, () => void requestPlayback());
+          hls.on(window.Hls.Events.ERROR, (_event, data) => {
+            if (data?.fatal) showFailure();
+          });
+          hls.attachMedia(video);
+          window.addEventListener("pagehide", () => hls?.destroy(), { once: true });
+          return;
+        }
+        void requestPlayback();
+        return;
+      }
+
+      if (status) status.textContent = "このブラウザでは再生できません。配信元リンクをご利用ください。";
+      playButton.disabled = false;
+      playButton.textContent = "ライブを再生";
+    });
+
+    video.addEventListener("playing", () => {
+      playButton.hidden = true;
+      if (status) status.textContent = "ライブ映像を再生中";
+    });
+    video.addEventListener("error", showFailure);
   });
 }
 

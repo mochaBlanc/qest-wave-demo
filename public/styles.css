@@ -950,6 +950,26 @@ h2 {
   object-fit: contain;
 }
 
+.live-play-button {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 2;
+  min-width: 116px;
+  padding: 10px 14px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  background: rgba(15, 42, 52, 0.88);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24);
+}
+
+.live-play-button:hover { background: rgba(37, 111, 134, 0.96); }
+.live-play-button[hidden] { display: none; }
+
 .live-check-status {
   color: var(--muted) !important;
   font-size: 11px !important;
