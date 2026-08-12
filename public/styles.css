@@ -527,6 +527,95 @@ h1 {
   margin-top: 16px;
 }
 
+.world-chart-section {
+  grid-column: 1 / -1;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 8px 22px rgba(65, 50, 32, 0.06);
+}
+
+.world-chart-head,
+.world-chart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.world-chart-head h2 {
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.world-chart-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #edf2f1;
+}
+
+.world-chart-tab {
+  min-width: 54px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.world-chart-tab.active {
+  background: var(--ocean);
+  color: #fff;
+  box-shadow: 0 2px 7px rgba(24, 49, 60, 0.16);
+}
+
+.world-chart-description {
+  margin: 8px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.world-chart-frame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 360px;
+  max-height: 620px;
+  overflow: hidden;
+  border: 1px solid rgba(24, 49, 60, 0.12);
+  border-radius: 12px;
+  background: #dce9ea;
+}
+
+.world-chart-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.world-chart-foot {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.world-chart-foot a {
+  color: var(--ocean);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.world-chart-foot a:hover {
+  text-decoration: underline;
+}
+
 .section-heading {
   display: flex;
   align-items: baseline;
@@ -1204,6 +1293,21 @@ h2 {
   }
 }
 
+@media (max-width: 560px) {
+  .world-chart-head {
+    align-items: flex-start;
+  }
+
+  .world-chart-head h2 {
+    font-size: 16px;
+  }
+
+  .world-chart-frame {
+    aspect-ratio: 4 / 3;
+    min-height: 390px;
+  }
+}
+
 @media (min-width: 980px) {
   .details {
     grid-template-columns: minmax(0, 1fr) 350px;
@@ -1212,12 +1316,16 @@ h2 {
 
   .slots-section {
     grid-column: 1;
-    grid-row: 2 / span 8;
+    grid-row: 3 / span 8;
   }
 
   .trend-section {
     grid-column: 1 / -1;
     grid-row: 1;
+  }
+
+  .world-chart-section {
+    grid-row: 2;
   }
 
   .notice {

@@ -67,6 +67,34 @@
           <div id="trend-grid" class="trend-grid"></div>
         </section>
 
+        <section class="world-chart-section" aria-labelledby="world-chart-title">
+          <div class="world-chart-head">
+            <div>
+              <p class="section-kicker">GLOBAL CHART</p>
+              <h2 id="world-chart-title">波・風 全世界チャート</h2>
+            </div>
+            <div class="world-chart-tabs" role="group" aria-label="表示レイヤー">
+              <button class="world-chart-tab active" type="button" data-windy-overlay="waves" aria-pressed="true">波高</button>
+              <button class="world-chart-tab" type="button" data-windy-overlay="wind" aria-pressed="false">風</button>
+            </div>
+          </div>
+          <p class="world-chart-description">日本周辺から太平洋全体の波と風の動きを確認できます。</p>
+          <div class="world-chart-frame">
+            <iframe
+              id="windy-world-chart"
+              src="https://embed.windy.com/embed.html?type=map&amp;location=coordinates&amp;metricRain=mm&amp;metricTemp=%C2%B0C&amp;metricWind=m%2Fs&amp;zoom=4&amp;overlay=waves&amp;product=ecmwfWaves&amp;level=surface&amp;lat=35.317&amp;lon=139.472&amp;marker=true&amp;message=true"
+              title="Windy 波・風 全世界チャート"
+              loading="lazy"
+              allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"
+            ></iframe>
+          </div>
+          <div class="world-chart-foot">
+            <span>Windy.com 提供</span>
+            <a href="https://www.windy.com/-Waves-waves?waves,35.317,139.472,4" target="_blank" rel="noopener noreferrer">Windyで全画面表示</a>
+          </div>
+        </section>
+
         <section class="slots-section" aria-labelledby="slots-title">
           <div class="section-heading">
             <p class="section-kicker">時間帯別</p>

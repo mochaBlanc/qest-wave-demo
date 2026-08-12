@@ -47,6 +47,11 @@ const state = {
   selectedMetric: "general_index",
 };
 
+const windyMaps = {
+  waves: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=4&overlay=waves&product=ecmwfWaves&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
+  wind: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=4&overlay=wind&product=ecmwf&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
+};
+
 async function loadBoard() {
   elements.refresh.disabled = true;
   elements.status.hidden = false;
@@ -506,6 +511,25 @@ function initLiveStreams() {
   });
 }
 
+function initWorldChart() {
+  const frame = document.querySelector("#windy-world-chart");
+  const tabs = [...document.querySelectorAll("[data-windy-overlay]")];
+  if (!frame || !tabs.length) return;
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const overlay = tab.dataset.windyOverlay;
+      if (!windyMaps[overlay] || tab.classList.contains("active")) return;
+      frame.src = windyMaps[overlay];
+      tabs.forEach((item) => {
+        const active = item === tab;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", String(active));
+      });
+    });
+  });
+}
+
 elements.refresh.addEventListener("click", loadBoard);
 initLiveStreams();
+initWorldChart();
 loadBoard();
