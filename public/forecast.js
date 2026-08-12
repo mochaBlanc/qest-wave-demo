@@ -1,9 +1,7 @@
 const metricTabGroups = [
   [
-    { label: "総合", key: "general_wave_index" },
     { label: "レッスン", key: "lesson_index" },
     { label: "初心者", key: "beginner_index" },
-    { label: "経験者", key: "advanced_index" },
   ],
   [
     { label: "ロング", key: "longboard_index" },
@@ -35,7 +33,7 @@ const forecastElements = {
 
 const forecastState = {
   board: null,
-  metric: "general_wave_index",
+  metric: "lesson_index",
   dayIndex: 0,
   selected: null,
 };
@@ -49,7 +47,9 @@ async function loadForecast() {
     const response = await fetch("/api/forecast", { headers: { Accept: "application/json" }, cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     forecastState.board = await response.json();
-    forecastState.metric = forecastState.board.default_metric || "general_wave_index";
+    forecastState.metric = metricTabs.some((tab) => tab.key === forecastState.board.default_metric)
+      ? forecastState.board.default_metric
+      : "lesson_index";
     forecastState.dayIndex = defaultDayIndex();
     renderForecast();
     forecastElements.status.hidden = true;
@@ -112,9 +112,9 @@ function renderAnalyst() {
 }
 
 function renderTags() {
-  forecastElements.tags.replaceChildren(...metricTabGroups.map((group) => {
+  forecastElements.tags.replaceChildren(...metricTabGroups.map((group, groupIndex) => {
     const row = document.createElement("div");
-    row.className = "tag-row";
+    row.className = `tag-row ${groupIndex === 0 ? "tag-row-learning" : "tag-row-board"}`;
     row.replaceChildren(...group.map((tab) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -210,7 +210,7 @@ function renderHeatmap() {
       cell.innerHTML = `
         <span class="heat-label">${escapeHtml(slot.label)}</span>
         <strong>${stars(value)}</strong>
-        <span>${escapeHtml(past ? "終了" : slot.status)}</span>
+        <span>${escapeHtml(past ? "終了" : displayStatus(slot))}</span>
         <em>${escapeHtml(slot.confidence)}</em>
       `;
       cell.addEventListener("click", () => {
@@ -248,7 +248,7 @@ function renderDetail() {
     <dl class="detail-list">
       <div><dt>時間帯</dt><dd>${escapeHtml(selected.slot.label)} ${escapeHtml(selected.slot.time_range)}${past ? "（終了）" : ""}</dd></div>
       <div><dt>表示指数</dt><dd>${escapeHtml(tab.label)}</dd></div>
-      <div><dt>ステータス</dt><dd>${escapeHtml(selected.slot.status)}</dd></div>
+      <div><dt>ステータス</dt><dd>${escapeHtml(displayStatus(selected.slot))}</dd></div>
       <div><dt>信頼度</dt><dd>${escapeHtml(selected.slot.confidence)}</dd></div>
       <div><dt>水温</dt><dd>${escapeHtml(formatWaterTemp(selected.slot.water_temp_c))}</dd></div>
       <div><dt>ウェット</dt><dd>${escapeHtml(selected.slot.wetsuit_label)} / ${escapeHtml(selected.slot.wetsuit_thickness)}</dd></div>
@@ -265,10 +265,14 @@ function topRecommendations() {
   const day = selectedDay();
   const items = (Array.isArray(day?.spots) ? day.spots : []).flatMap((spot) =>
     (Array.isArray(spot.slots) ? spot.slots : []).map((slot) => ({ spot, slot })),
-  ).filter((item) => !isPastSlot(day, item.slot));
+  ).filter((item) => !isPastSlot(day, item.slot) && item.slot.status !== "非推奨");
   const preferMorning = forecastState.metric === "lesson_index" || forecastState.metric === "beginner_index";
   return items
     .sort((a, b) => {
+      if (preferMorning) {
+        const bySafety = statusRank(a.slot.status) - statusRank(b.slot.status);
+        if (bySafety !== 0) return bySafety;
+      }
       const byScore = score(b.slot) - score(a.slot);
       if (byScore !== 0) return byScore;
       if (preferMorning) return slotRank(a.slot.label) - slotRank(b.slot.label);
@@ -298,6 +302,17 @@ function selectedTab() {
 function score(slot) {
   const value = Number(slot?.[forecastState.metric]);
   return Number.isFinite(value) ? Math.max(1, Math.min(5, Math.round(value))) : 1;
+}
+
+function displayStatus(slot) {
+  if (slot?.status === "非推奨") return "非推奨";
+  const boardMetric = ["longboard_index", "midlength_index", "shortboard_index"].includes(forecastState.metric);
+  if (boardMetric && slot?.status === "慎重" && score(slot) >= 4) return "経験者向け";
+  return text(slot?.status);
+}
+
+function statusRank(status) {
+  return status === "おすすめ" ? 0 : status === "まずまず" ? 1 : status === "慎重" ? 2 : 3;
 }
 
 function slotRank(label) {

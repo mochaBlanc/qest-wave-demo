@@ -242,7 +242,7 @@ interface ForecastBoard {
   brand: "BIG WAVE";
   title: "湘南7日サーフィン予測";
   area: "鵠沼・江の島・鎌倉側";
-  default_metric: "general_wave_index";
+  default_metric: "lesson_index";
   tags: string[];
   days: ForecastDay[];
   wetsuit_notice: string;
@@ -1291,8 +1291,8 @@ function buildForecastBoard(raw: RawForecastData, tide: HourlyData | null = null
     brand: "BIG WAVE",
     title: "湘南7日サーフィン予測",
     area: "鵠沼・江の島・鎌倉側",
-    default_metric: "general_wave_index",
-    tags: ["general", "lesson", "beginner", "longboard", "midlength", "shortboard", "advanced"],
+    default_metric: "lesson_index",
+    tags: ["lesson", "beginner", "longboard", "midlength", "shortboard"],
     days,
     wetsuit_notice:
       "水温・気温・風・体感には個人差があります。寒がりの方やレッスンでは一段暖かめを選ぶと安心です。",
@@ -1349,6 +1349,11 @@ function forecastSlotForSpot(
   });
   let lessonIndex = danger ? 1 : clampScore(Math.round(lesson));
   let beginnerIndex = danger ? 1 : clampScore(Math.round(beginner));
+  const veryRoughForLearners = wave >= 1.1 || wind >= 7 || (onshore && wind >= 6) || baseline.rain_mm > 4;
+  if (!danger && rough) {
+    lessonIndex = Math.min(lessonIndex, veryRoughForLearners ? 2 : 3);
+    beginnerIndex = Math.min(beginnerIndex, veryRoughForLearners ? 2 : 3);
+  }
   if (baseline.tide_trend === "干潮前後") {
     if (lessonIndex >= 4) lessonIndex = clampScore(lessonIndex - 1);
     if (beginnerIndex >= 4) beginnerIndex = clampScore(beginnerIndex - 1);
@@ -1367,7 +1372,7 @@ function forecastSlotForSpot(
     midlength_index: clampScore(Math.round(danger ? midlength - 1 : midlength)),
     shortboard_index: clampScore(Math.round(danger ? shortboard - 1 : shortboard)),
     advanced_index: clampScore(Math.round(danger ? advanced - 1 : advanced)),
-    status: forecastStatus(danger, rough, lesson, general),
+    status: forecastStatus(danger, rough, lessonIndex, beginnerIndex),
     message: forecastMessage(spot, baseline, wave, wind, onshore, higashihamaFallbackBoost > 0),
     caution,
     confidence,
@@ -1389,16 +1394,18 @@ function scoreLesson(
   morningBonus: number,
   afternoonPenalty: number,
 ): number {
-  let score = 3 + morningBonus - afternoonPenalty;
-  if (wave >= 0.2 && wave <= 0.55) score += 2;
-  else if (wave > 0.55 && wave <= 0.75) score += 1;
-  else if (wave < 0.15) score -= 1;
-  if (wave >= 0.9) score -= 2;
-  if (wave >= 1.1) score -= 2;
+  let score = 2.5 + morningBonus - afternoonPenalty;
+  if (wave >= 0.12 && wave <= 0.6) score += 2;
+  else if (wave > 0.6 && wave <= 0.8) score += 0.5;
+  else if (wave < 0.12) score += 0.5;
+  if (wave >= 0.85) score -= 1.5;
+  if (wave >= 1.05) score -= 2;
   if (wind <= 3) score += 1;
-  if (wind >= 5) score -= 1;
-  if (onshore && wind >= 5) score -= 1.5;
+  else if (wind <= 4) score += 0.5;
+  if (wind >= 5) score -= 1.5;
+  if (onshore && wind >= 4) score -= 1.5;
   if (rain > 1) score -= 1;
+  if (rain > 4) score -= 1;
   return score;
 }
 
@@ -1415,9 +1422,12 @@ function scoreBeginnerForecast(
   else if (wave > 0.65 && wave <= 0.85) score += 1;
   else if (wave < 0.15) score -= 1;
   if (wave >= 1.0) score -= 2;
+  if (wave >= 1.15) score -= 2;
   if (wind <= 4) score += 1;
-  if (onshore && wind >= 5) score -= 1.5;
+  if (wind >= 6) score -= 1.5;
+  if (onshore && wind >= 5) score -= 2;
   if (rain > 1) score -= 1;
+  if (rain > 4) score -= 1;
   return score;
 }
 
@@ -1490,10 +1500,10 @@ function scoreAdvancedForecast(
   return score;
 }
 
-function forecastStatus(danger: boolean, rough: boolean, lesson: number, general: number): string {
+function forecastStatus(danger: boolean, rough: boolean, lesson: number, beginner: number): string {
   if (danger) return "非推奨";
   if (rough || lesson <= 2) return "慎重";
-  if (lesson >= 4 || general >= 4) return "おすすめ";
+  if (lesson >= 4 || beginner >= 4) return "おすすめ";
   return "まずまず";
 }
 
@@ -1574,7 +1584,12 @@ function wetsuitRecommendation(
 
 function forecastHasWetsuitData(value: Record<string, unknown>): boolean {
   const days = value.days;
-  if (!Array.isArray(days) || !days.length || typeof value.wetsuit_notice !== "string") return false;
+  if (
+    value.default_metric !== "lesson_index" ||
+    !Array.isArray(days) ||
+    !days.length ||
+    typeof value.wetsuit_notice !== "string"
+  ) return false;
   const firstDay = days[0];
   if (!isRecord(firstDay) || !Array.isArray(firstDay.spots)) return false;
   const firstSpot = firstDay.spots[0];
@@ -1595,8 +1610,8 @@ function normalizeStoredForecast(value: Record<string, unknown>): ForecastBoard 
     brand: "BIG WAVE",
     title: "湘南7日サーフィン予測",
     area: "鵠沼・江の島・鎌倉側",
-    default_metric: "general_wave_index",
-    tags: normalizeStringArray(value.tags, ["general", "lesson", "beginner", "longboard", "midlength", "shortboard", "advanced"]),
+    default_metric: "lesson_index",
+    tags: normalizeStringArray(value.tags, ["lesson", "beginner", "longboard", "midlength", "shortboard"]),
     days: normalizeStoredForecastDays(value.days),
     wetsuit_notice: asString(
       value.wetsuit_notice,

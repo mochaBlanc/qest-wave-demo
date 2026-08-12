@@ -955,6 +955,30 @@ h2 {
   color: #fff;
 }
 
+.tag-row-learning .tab-button {
+  border-color: #b8d9ca;
+  background: #f0f8f3;
+  color: #28664c;
+}
+
+.tag-row-learning .tab-button.active {
+  border-color: #4f9a76;
+  background: #5b9f7c;
+  color: #fff;
+}
+
+.tag-row-board .tab-button {
+  border-color: #e6c9a9;
+  background: #fff7ed;
+  color: #865423;
+}
+
+.tag-row-board .tab-button.active {
+  border-color: #c88746;
+  background: #c88746;
+  color: #fff;
+}
+
 .day-button {
   flex: 0 0 94px;
   display: grid;
