@@ -32,10 +32,8 @@ const elements = {
 
 const metricTabGroups = [
   [
-    { label: "総合", key: "general_index" },
     { label: "レッスン", key: "lesson_index" },
     { label: "初心者", key: "beginner_index" },
-    { label: "経験者", key: "experienced_index" },
   ],
   [
     { label: "ロング", key: "longboard_index" },
@@ -49,7 +47,7 @@ const metricTabs = metricTabGroups.flat();
 const state = {
   board: null,
   slots: [],
-  selectedMetric: "general_index",
+  selectedMetric: "lesson_index",
 };
 
 const windyMaps = {
@@ -184,9 +182,9 @@ function renderBoard(board) {
 }
 
 function renderTags() {
-  elements.tagSelector.replaceChildren(...metricTabGroups.map((group) => {
+  elements.tagSelector.replaceChildren(...metricTabGroups.map((group, groupIndex) => {
     const row = document.createElement("div");
-    row.className = "tag-row";
+    row.className = `tag-row ${groupIndex === 0 ? "tag-row-learning" : "tag-row-board"}`;
     row.replaceChildren(...group.map((tab) => {
       const button = document.createElement("button");
       button.type = "button";
