@@ -6,6 +6,7 @@
     <meta name="description" content="鵠沼海岸の時間帯別サーフィン指数を確認できるBIG WAVEデモ" />
     <title>鵠沼サーフィン指数</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -66,7 +67,7 @@
           <div id="trend-grid" class="trend-grid"></div>
         </section>
 
-        <section aria-labelledby="slots-title">
+        <section class="slots-section" aria-labelledby="slots-title">
           <div class="section-heading">
             <p class="section-kicker">時間帯別</p>
             <h2 id="slots-title" class="sr-only">コンディション</h2>
@@ -95,6 +96,31 @@
         <aside class="local-note live-check-card">
           <p class="info-label">LIVE CHECK</p>
           <div class="live-check-camera">
+            <p class="live-check-name">鵠沼⑦ 引地川河口☆☆☆</p>
+            <p class="live-check-provider">藤沢市鵠沼海岸・ライブ動画・<a href="https://namiaru.com/" target="_blank" rel="noopener noreferrer">なみある？提供</a></p>
+            <p class="live-check-description">河口側の波・混雑・ピーク位置を確認</p>
+            <div class="live-check-frame">
+              <video
+                class="hls-live-player"
+                controls
+                playsinline
+                preload="none"
+                data-hls-src="https://cf-iplvc21004.videog.jp/live/_definst_/-GrLD4br1o0d.stream/playlist.m3u8"
+                aria-label="鵠沼⑦ 引地川河口 ライブカメラ"
+              ></video>
+            </div>
+            <p class="live-check-status" aria-live="polite">再生ボタンを押してライブ映像を確認</p>
+            <a
+              class="live-check-button"
+              href="https://www.surfers-ocean.com/%E3%82%B5%E3%83%BC%E3%83%95%E3%82%A3%E3%83%B3%E6%B3%A2%E6%83%85%E5%A0%B1/%E9%B5%A0%E6%B2%BC%E6%B5%B7%E5%B2%B8/#%E3%83%A9%E3%82%A4%E3%83%96%E3%82%AB%E3%83%A1%E3%83%A9"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              配信元で開く
+            </a>
+          </div>
+
+          <div class="live-check-camera live-check-camera-secondary">
             <p class="live-check-name">鵠沼③ 水族館前〜銅像前☆☆☆</p>
             <p class="live-check-provider">藤沢市鵠沼海岸・YouTubeライブ動画・NAMIARUMOVIE提供</p>
             <p class="live-check-description">白波・混雑・面の乱れを確認</p>
@@ -119,31 +145,27 @@
           </div>
 
           <div class="live-check-camera live-check-camera-secondary">
-            <p class="live-check-zone">夏季サーフエリア</p>
-            <p class="live-check-name">鵠沼⑧ 引地川河口☆</p>
-            <p class="live-check-provider">藤沢市鵠沼海岸・ライブ画像・BCM提供</p>
-            <p class="live-check-description">白杭西側の波・混雑・ピーク位置を確認</p>
-            <a
-              class="live-check-still"
-              href="https://www.bcm-surfpatrol.com/wave-detail/5/60/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="鵠沼 引地川河口の波情報をBCMで開く"
-            >
-              <img
-                src="https://cam-image.risesystem.com/api/cameraSnap?cameraId=98"
-                alt="鵠沼 引地川河口の現在のライブ画像"
-                loading="lazy"
-                referrerpolicy="no-referrer"
-              />
-            </a>
+            <p class="live-check-name">鵠沼④ 水族館前〜銅像前☆☆☆</p>
+            <p class="live-check-provider">藤沢市鵠沼海岸・ライブ動画・<a href="https://namiaru.com/" target="_blank" rel="noopener noreferrer">なみある？提供</a></p>
+            <p class="live-check-description">水族館前から銅像前の波・混雑を別角度で確認</p>
+            <div class="live-check-frame">
+              <video
+                class="hls-live-player"
+                controls
+                playsinline
+                preload="none"
+                data-hls-src="https://cf-iplvc21004.videog.jp/live/_definst_/XVrK5KbyfB0T.stream/playlist.m3u8"
+                aria-label="鵠沼④ 水族館前〜銅像前 ライブカメラ"
+              ></video>
+            </div>
+            <p class="live-check-status" aria-live="polite">再生ボタンを押してライブ映像を確認</p>
             <a
               class="live-check-button"
-              href="https://www.bcm-surfpatrol.com/wave-detail/5/60/"
+              href="https://www.surfers-ocean.com/%E3%82%B5%E3%83%BC%E3%83%95%E3%82%A3%E3%83%B3%E6%B3%A2%E6%83%85%E5%A0%B1/%E9%B5%A0%E6%B2%BC%E6%B5%B7%E5%B2%B8/#%E3%83%A9%E3%82%A4%E3%83%96%E3%82%AB%E3%83%A1%E3%83%A9"
               target="_blank"
               rel="noopener noreferrer"
             >
-              引地川河口を開く
+              配信元で開く
             </a>
           </div>
         </aside>

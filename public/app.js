@@ -212,6 +212,8 @@ function renderTrend(trend, slots) {
   const directions = numericSeries(trend?.wind_direction_deg, labels.length);
   const rain = numericSeries(trend?.rain_mm, labels.length);
   const water = waterTempSeries(trend, slots, labels);
+  const tides = tideHeightSeries(slots, labels);
+  const tideTrends = tideTrendSeries(slots, labels);
   const rows = [
     hasValues(waves) ? trendStripRow("波", `
       <div class="trend-cell-grid trend-meter-grid">${waves.map((value) => verticalMeterCell(value, waves, formatMeters, "wave")).join("")}</div>
@@ -225,6 +227,7 @@ function renderTrend(trend, slots) {
     hasValues(water) ? trendStripRow("水温", `
       <div class="trend-cell-grid">${water.map((value) => trendMetric(formatTemp(value))).join("")}</div>
     `) : "",
+    hasValues(tides) ? trendStripRow("潮", tideTrendChart(tides, tideTrends)) : "",
   ].filter(Boolean);
 
   elements.trendSection.hidden = rows.length === 0;
@@ -277,6 +280,49 @@ function windMeterCell(speed, direction, series) {
 
 function trendMetric(value) {
   return `<span class="trend-metric">${escapeHtml(value)}</span>`;
+}
+
+function tideTrendChart(tides, trends) {
+  const valid = tides.filter((value) => value !== null);
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = Math.max(max - min, 0.1);
+  const points = tides.map((value, index) => {
+    const x = 12.5 + index * 25;
+    const y = value === null ? 50 : 48 - ((value - min) / range) * 34;
+    return `${x},${y}`;
+  }).join(" ");
+  return `
+    <div class="trend-tide-chart">
+      <svg viewBox="0 0 100 58" preserveAspectRatio="none" aria-hidden="true">
+        <polyline points="${points}" vector-effect="non-scaling-stroke"></polyline>
+      </svg>
+      <div class="trend-tide-values">
+        ${tides.map((value, index) => `
+          <span>
+            <strong>${escapeHtml(value === null ? "—" : `${value.toFixed(2)}m`)}</strong>
+            ${trends[index] ? `<em>${escapeHtml(trends[index])}</em>` : ""}
+          </span>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function tideHeightSeries(slots, labels) {
+  return labels.map((label) => {
+    const slot = Array.isArray(slots) ? slots.find((item) => item.label === label) : null;
+    if (slot?.tide_height_m === null || slot?.tide_height_m === undefined || slot?.tide_height_m === "") return null;
+    const value = Number(slot?.tide_height_m);
+    return Number.isFinite(value) ? value : null;
+  });
+}
+
+function tideTrendSeries(slots, labels) {
+  return labels.map((label) => {
+    const slot = Array.isArray(slots) ? slots.find((item) => item.label === label) : null;
+    return typeof slot?.tide_trend === "string" ? slot.tide_trend : "";
+  });
 }
 
 function trendLabels(trend) {
@@ -445,5 +491,35 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function initLiveStreams() {
+  document.querySelectorAll("video[data-hls-src]").forEach((video) => {
+    const source = video.dataset.hlsSrc;
+    const status = video.closest(".live-check-camera")?.querySelector(".live-check-status");
+    if (!source) return;
+
+    if (window.Hls?.isSupported()) {
+      const hls = new window.Hls();
+      hls.loadSource(source);
+      hls.attachMedia(video);
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        if (status) status.textContent = "再生ボタンを押してライブ映像を確認";
+      });
+      hls.on(window.Hls.Events.ERROR, (_event, data) => {
+        if (data?.fatal && status) status.textContent = "映像を読み込めません。配信元リンクをご利用ください。";
+      });
+      window.addEventListener("pagehide", () => hls.destroy(), { once: true });
+      return;
+    }
+
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = source;
+      return;
+    }
+
+    if (status) status.textContent = "このブラウザでは再生できません。配信元リンクをご利用ください。";
+  });
+}
+
 elements.refresh.addEventListener("click", loadBoard);
+initLiveStreams();
 loadBoard();
