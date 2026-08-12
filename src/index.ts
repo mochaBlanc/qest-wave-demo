@@ -240,7 +240,7 @@ interface ForecastAnalyst {
 interface ForecastBoard {
   updated_at: string;
   brand: "BIG WAVE";
-  title: "湘南7日サーフィン予測";
+  title: "鵠沼・明日のサーフィン予測";
   area: "鵠沼・江の島・鎌倉側";
   default_metric: "lesson_index";
   tags: string[];
@@ -472,15 +472,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/api/forecast") {
       const cached = await env.QEST_KV.get<unknown>(FORECAST_KEY, "json");
       if (isRecord(cached) && forecastHasWetsuitData(cached)) {
-        const normalized = normalizeStoredForecast(cached);
-        if (normalized.analyst.ai_comment_status === "ok" || !env.DIFY_FORECAST_API_KEY) return json(normalized);
-        console.warn("Cached forecast analyst fallback; refresh attempted");
-        try {
-          return json(await refreshForecast(env));
-        } catch (error) {
-          console.error("Forecast analyst refresh from cached fallback failed", error);
-          return json(normalized);
-        }
+        return json(normalizeStoredForecast(cached));
       }
 
       try {
@@ -547,8 +539,8 @@ async function refreshBoard(env: Env): Promise<TodayBoard> {
 }
 
 async function refreshForecast(env: Env): Promise<ForecastBoard> {
-  const raw = await fetchRawForecastData(7);
-  const tide = await fetchTideData(7).catch((error: unknown) => {
+  const raw = await fetchNearTermForecastData(2);
+  const tide = await fetchTideData(2).catch((error: unknown) => {
     console.error("Forecast tide fetch failed", {
       message: error instanceof Error ? error.message : String(error),
     });
@@ -564,8 +556,7 @@ async function refreshForecast(env: Env): Promise<ForecastBoard> {
         .filter((slot) => slot.tide_height_m !== null || slot.tide_trend !== null).length,
     });
   }
-  const analyst = await runDifyForecastAnalyst(env, forecastBase);
-  const forecast: ForecastBoard = { ...forecastBase, analyst };
+  const forecast: ForecastBoard = { ...forecastBase, analyst: fallbackForecastAnalyst() };
   await env.QEST_KV.put(FORECAST_KEY, JSON.stringify(forecast));
   return forecast;
 }
@@ -1096,6 +1087,31 @@ async function fetchRawForecastData(forecastDays: number): Promise<RawForecastDa
   };
 }
 
+async function fetchNearTermForecastData(forecastDays: number): Promise<RawForecastData> {
+  const common = `latitude=35.317&longitude=139.472&timezone=Asia%2FTokyo&forecast_days=${forecastDays}`;
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?${common}&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,sea_surface_temperature`;
+  const jmaUrl = `https://api.open-meteo.com/v1/jma?${common}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code,cloud_cover&wind_speed_unit=ms`;
+  const fallbackWeatherUrl = `https://api.open-meteo.com/v1/forecast?${common}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code,cloud_cover&wind_speed_unit=ms`;
+
+  const marinePromise = fetchOpenMeteo(marineUrl, "Marine best-match");
+  let weatherResponse: OpenMeteoResponse;
+  try {
+    weatherResponse = await fetchOpenMeteo(jmaUrl, "JMA near-term weather");
+    console.log("Forecast weather model", { source: "JMA MSM/GSM seamless", days: forecastDays });
+  } catch (error) {
+    console.warn("JMA near-term weather failed; best-match fallback used", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    weatherResponse = await fetchOpenMeteo(fallbackWeatherUrl, "Weather best-match fallback");
+  }
+  const marineResponse = await marinePromise;
+
+  if (!marineResponse.hourly || !weatherResponse.hourly) {
+    throw new Error("Open-Meteo returned no near-term hourly data");
+  }
+  return { marine: marineResponse.hourly, weather: weatherResponse.hourly };
+}
+
 async function fetchTideData(forecastDays: number): Promise<HourlyData> {
   const tideUrl =
     `https://marine-api.open-meteo.com/v1/marine?latitude=35.306&longitude=139.481&timezone=Asia%2FTokyo&forecast_days=${forecastDays}&hourly=sea_level_height_msl`;
@@ -1265,7 +1281,7 @@ function aggregateSlot(
 }
 
 function buildForecastBoard(raw: RawForecastData, tide: HourlyData | null = null): ForecastWithoutAnalyst {
-  const dates = uniqueDates(raw.marine.time).slice(0, 7);
+  const dates = uniqueDates(raw.marine.time).slice(0, 2);
   if (!dates.length) throw new Error("Open-Meteo returned no forecast dates");
 
   const days = dates.map((date, dayIndex) => {
@@ -1289,14 +1305,14 @@ function buildForecastBoard(raw: RawForecastData, tide: HourlyData | null = null
   return {
     updated_at: formatJapanDateTime(),
     brand: "BIG WAVE",
-    title: "湘南7日サーフィン予測",
+    title: "鵠沼・明日のサーフィン予測",
     area: "鵠沼・江の島・鎌倉側",
     default_metric: "lesson_index",
     tags: ["lesson", "beginner", "longboard", "midlength", "shortboard"],
     days,
     wetsuit_notice:
       "水温・気温・風・体感には個人差があります。寒がりの方やレッスンでは一段暖かめを選ぶと安心です。",
-    notice: "この予測は気象・海況データと簡易ルールによる参考情報です。実際の海況は現地で確認してください。",
+    notice: "この予測はOpen-Meteoの波浪予測とJMA近程気象データを使った参考情報です。砕波サイズ・流れ・混雑はライブ映像と現地で確認してください。",
   };
 }
 
@@ -1587,7 +1603,7 @@ function forecastHasWetsuitData(value: Record<string, unknown>): boolean {
   if (
     value.default_metric !== "lesson_index" ||
     !Array.isArray(days) ||
-    !days.length ||
+    days.length !== 2 ||
     typeof value.wetsuit_notice !== "string"
   ) return false;
   const firstDay = days[0];
@@ -1608,7 +1624,7 @@ function normalizeStoredForecast(value: Record<string, unknown>): ForecastBoard 
   return {
     updated_at: asString(value.updated_at, formatJapanDateTime()),
     brand: "BIG WAVE",
-    title: "湘南7日サーフィン予測",
+    title: "鵠沼・明日のサーフィン予測",
     area: "鵠沼・江の島・鎌倉側",
     default_metric: "lesson_index",
     tags: normalizeStringArray(value.tags, ["lesson", "beginner", "longboard", "midlength", "shortboard"]),
@@ -1714,13 +1730,29 @@ function reduceConfidence(
 function forecastDaySummary(baselineSlots: SlotData[], spots: ForecastSpot[]): string {
   const bestLesson = spots
     .flatMap((spot) => spot.slots.map((slot) => ({ spot, slot })))
-    .sort((a, b) => b.slot.lesson_index - a.slot.lesson_index)[0];
+    .filter(({ slot }) => slot.status !== "非推奨")
+    .sort((a, b) => {
+      const bySafety = forecastStatusRank(a.slot.status) - forecastStatusRank(b.slot.status);
+      if (bySafety !== 0) return bySafety;
+      const byScore = b.slot.lesson_index - a.slot.lesson_index;
+      if (byScore !== 0) return byScore;
+      return slotLabelRank(a.slot.label) - slotLabelRank(b.slot.label);
+    })[0];
   const maxWave = Math.max(...baselineSlots.map((slot) => slot.wave_height_m));
   if (!bestLesson) return "時間帯ごとの波と風を確認して、無理のない範囲で計画してください。";
   if (maxWave >= 1.1 && bestLesson.spot.spot_id === "katase_higashihama_koshigoe") {
     return "鵠沼が大きめの日は、江の島・鎌倉側の穏やかな時間帯を代替候補にできます。";
   }
   return `${bestLesson.spot.spot_name}の${bestLesson.slot.label}が、レッスン・基礎練習の第一候補です。`;
+}
+
+function forecastStatusRank(status: string): number {
+  return status === "おすすめ" ? 0 : status === "まずまず" ? 1 : status === "慎重" ? 2 : 3;
+}
+
+function slotLabelRank(label: string): number {
+  const index = ["早朝", "午前", "午後", "夕方"].indexOf(label);
+  return index < 0 ? 99 : index;
 }
 
 async function callDifyWorkflow(

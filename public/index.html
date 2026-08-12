@@ -19,7 +19,7 @@
             <p id="updated-at" class="updated-at">更新（JST）：—</p>
           </div>
           <div class="header-actions">
-            <a class="board-link" href="/forecast">7日予測を見る</a>
+            <a class="board-link" href="/forecast">明日の予測を見る</a>
             <button id="refresh-button" class="refresh-button" type="button">更新</button>
           </div>
         </header>
@@ -56,6 +56,21 @@
             <p><span>経験者おすすめ</span><strong id="advanced-best"></strong></p>
           </section>
         </div>
+      </section>
+
+      <section id="tomorrow-board" class="tomorrow-board" aria-labelledby="tomorrow-title" hidden>
+        <div class="tomorrow-head">
+          <div>
+            <p class="section-kicker">NEXT DAY</p>
+            <h2 id="tomorrow-title">明日の予測</h2>
+            <p id="tomorrow-meta" class="tomorrow-meta"></p>
+          </div>
+          <a class="board-link" href="/forecast">スポット別に見る</a>
+        </div>
+        <p id="tomorrow-summary" class="tomorrow-summary"></p>
+        <div id="tomorrow-candidates" class="tomorrow-candidates"></div>
+        <div id="tomorrow-slots" class="tomorrow-slots" aria-label="鵠沼メインの明日時間帯別予測"></div>
+        <p class="tomorrow-source">波浪 Best Match + JMA近程気象。前日夜と当日朝に再確認してください。</p>
       </section>
 
       <div id="details" class="details" hidden>

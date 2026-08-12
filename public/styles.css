@@ -48,7 +48,8 @@ button { font: inherit; }
 
 .forecast-board,
 .slot-card,
-.local-note {
+.local-note,
+.tomorrow-board {
   border: 1px solid var(--line);
   background: var(--paper);
   box-shadow: 0 8px 22px rgba(65, 50, 32, 0.06);
@@ -57,6 +58,111 @@ button { font: inherit; }
 .forecast-board {
   padding: 16px;
   border-radius: 18px;
+}
+
+.tomorrow-board {
+  display: grid;
+  gap: 11px;
+  margin-top: 14px;
+  padding: 15px 16px;
+  border-radius: 18px;
+}
+
+.tomorrow-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tomorrow-head h2 {
+  margin: 2px 0 0;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.tomorrow-meta,
+.tomorrow-source {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tomorrow-summary {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--ocean);
+  background: var(--ocean-soft);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.tomorrow-candidates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tomorrow-candidate {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--blue-line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.tomorrow-candidate span,
+.tomorrow-candidate small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tomorrow-candidate strong { font-size: 13px; }
+
+.tomorrow-candidate em {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-self: center;
+  color: var(--ocean);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.tomorrow-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tomorrow-slot {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: #e6f3ef;
+  color: #245a48;
+}
+
+.tomorrow-slot.cautious { background: #fbefcf; color: #76551b; }
+.tomorrow-slot.avoid { background: #eeeae5; color: #756b63; }
+
+.tomorrow-slot span,
+.tomorrow-slot small {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tomorrow-slot strong {
+  font-size: 12px;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
 }
 
 .board-header {
@@ -1318,6 +1424,12 @@ h2 {
 }
 
 @media (max-width: 560px) {
+  .tomorrow-candidates { grid-template-columns: 1fr; }
+
+  .tomorrow-slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .world-chart-head {
     align-items: flex-start;
   }

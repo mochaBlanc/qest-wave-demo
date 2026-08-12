@@ -20,8 +20,6 @@ const forecastElements = {
   meta: document.querySelector("#forecast-meta"),
   area: document.querySelector("#forecast-area"),
   todayEndedNote: document.querySelector("#today-ended-note"),
-  analystSection: document.querySelector("#analyst-section"),
-  analystContent: document.querySelector("#analyst-content"),
   tags: document.querySelector("#tag-selector"),
   days: document.querySelector("#day-selector"),
   recommendationTitle: document.querySelector("#recommendation-title"),
@@ -41,7 +39,7 @@ const forecastState = {
 async function loadForecast() {
   forecastElements.status.hidden = false;
   forecastElements.status.classList.remove("error");
-  forecastElements.status.textContent = "7日予測を読み込んでいます…";
+  forecastElements.status.textContent = "近程予測を読み込んでいます…";
 
   try {
     const response = await fetch("/api/forecast", { headers: { Accept: "application/json" }, cache: "no-store" });
@@ -57,7 +55,7 @@ async function loadForecast() {
   } catch (error) {
     console.error("Failed to load forecast", error);
     forecastElements.status.classList.add("error");
-    forecastElements.status.textContent = "7日予測を読み込めませんでした。時間をおいてもう一度お試しください。";
+    forecastElements.status.textContent = "近程予測を読み込めませんでした。時間をおいてもう一度お試しください。";
   }
 }
 
@@ -65,13 +63,12 @@ function renderForecast() {
   const board = forecastState.board;
   const day = selectedDay();
   forecastElements.brand.textContent = text(board.brand);
-  forecastElements.title.textContent = "鵠沼サーフィン指数予想";
+  forecastElements.title.textContent = "鵠沼・明日のサーフィン予測";
   forecastElements.meta.textContent = `更新（JST）：${text(board.updated_at)}`;
   forecastElements.area.textContent = text(board.area);
   forecastElements.notice.textContent = text(board.notice);
   forecastElements.todayEndedNote.hidden = !isTodayFullyEnded();
 
-  renderAnalyst();
   renderTags();
   renderDays();
   renderRecommendations();
@@ -81,34 +78,6 @@ function renderForecast() {
     forecastState.selected = firstRecommendation() || firstCell(day);
   }
   renderDetail();
-}
-
-function renderAnalyst() {
-  const analyst = forecastState.board?.analyst;
-  const shouldShow = analyst?.ai_comment_status === "ok";
-  forecastElements.analystSection.hidden = !shouldShow;
-  forecastElements.analystContent.replaceChildren();
-  if (!shouldShow) return;
-
-  const summaries = [
-    ["今週の狙い目", analyst.weekly_summary],
-    ["レッスン候補", analyst.lesson_summary],
-  ].filter(([, value]) => typeof value === "string" && value.trim());
-
-  if (!summaries.length) {
-    forecastElements.analystSection.hidden = true;
-    return;
-  }
-
-  const summaryList = document.createElement("div");
-  summaryList.className = "analyst-summary-list";
-  summaryList.replaceChildren(...summaries.map(([label, value]) => {
-    const row = document.createElement("p");
-    row.className = "analyst-summary-row";
-    row.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>`;
-    return row;
-  }));
-  forecastElements.analystContent.append(summaryList);
 }
 
 function renderTags() {

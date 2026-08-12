@@ -22,6 +22,11 @@ const elements = {
   waterNoteCard: document.querySelector("#water-note-card"),
   waterNoteSummary: document.querySelector("#water-note-summary"),
   wetsuitNoteSummary: document.querySelector("#wetsuit-note-summary"),
+  tomorrowBoard: document.querySelector("#tomorrow-board"),
+  tomorrowMeta: document.querySelector("#tomorrow-meta"),
+  tomorrowSummary: document.querySelector("#tomorrow-summary"),
+  tomorrowCandidates: document.querySelector("#tomorrow-candidates"),
+  tomorrowSlots: document.querySelector("#tomorrow-slots"),
   notice: document.querySelector("#notice"),
 };
 
@@ -72,6 +77,87 @@ async function loadBoard() {
   } finally {
     elements.refresh.disabled = false;
   }
+}
+
+async function loadTomorrowBoard() {
+  elements.tomorrowBoard.hidden = true;
+  try {
+    const response = await fetch("/api/forecast", { headers: { Accept: "application/json" }, cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const forecast = await response.json();
+    const days = Array.isArray(forecast.days) ? forecast.days : [];
+    const tomorrow = days.find((day) => day?.date && day.date > currentJstDate());
+    if (!tomorrow) return;
+
+    const candidates = [
+      bestTomorrowCandidate(tomorrow, "lesson_index", "レッスン"),
+      bestTomorrowCandidate(tomorrow, "beginner_index", "初心者練習"),
+    ].filter(Boolean);
+    const kugenuma = tomorrow.spots?.find((spot) => spot.spot_id === "kugenuma_main");
+
+    elements.tomorrowMeta.textContent = `${formatForecastDate(tomorrow.date)} / 信頼度 ${confidenceLabel(tomorrow.confidence)} / 更新 ${text(forecast.updated_at)} JST`;
+    elements.tomorrowSummary.textContent = text(tomorrow.summary);
+    elements.tomorrowCandidates.replaceChildren(...candidates.map(tomorrowCandidateCard));
+    elements.tomorrowSlots.replaceChildren(...(Array.isArray(kugenuma?.slots) ? kugenuma.slots : []).map(tomorrowSlotChip));
+    elements.tomorrowBoard.hidden = false;
+  } catch (error) {
+    console.error("Failed to load tomorrow forecast", error);
+  }
+}
+
+function bestTomorrowCandidate(day, key, label) {
+  const items = (Array.isArray(day?.spots) ? day.spots : []).flatMap((spot) =>
+    (Array.isArray(spot.slots) ? spot.slots : []).map((slot) => ({ spot, slot })),
+  ).filter(({ slot }) => slot.status !== "非推奨");
+  const best = items.sort((a, b) => {
+    const byStatus = forecastStatusRank(a.slot.status) - forecastStatusRank(b.slot.status);
+    if (byStatus !== 0) return byStatus;
+    const byScore = scoreValue(b.slot?.[key]) - scoreValue(a.slot?.[key]);
+    if (byScore !== 0) return byScore;
+    return slotRank(a.slot.label) - slotRank(b.slot.label);
+  })[0];
+  return best ? { ...best, key, label } : null;
+}
+
+function tomorrowCandidateCard(item) {
+  const article = document.createElement("article");
+  article.className = "tomorrow-candidate";
+  article.innerHTML = `
+    <span>${escapeHtml(item.label)}</span>
+    <strong>${escapeHtml(item.spot.spot_name)}・${escapeHtml(item.slot.label)}</strong>
+    <em>${escapeHtml(plainStars(item.slot[item.key]))}</em>
+    <small>${escapeHtml(item.slot.status)} / ${escapeHtml(item.slot.time_range)}</small>
+  `;
+  return article;
+}
+
+function tomorrowSlotChip(slot) {
+  const article = document.createElement("article");
+  article.className = `tomorrow-slot ${slot.status === "非推奨" ? "avoid" : slot.status === "慎重" ? "cautious" : ""}`;
+  article.innerHTML = `
+    <span>${escapeHtml(slot.label)}</span>
+    <strong>${escapeHtml(plainStars(slot.lesson_index))}</strong>
+    <small>${escapeHtml(slot.status)}</small>
+  `;
+  return article;
+}
+
+function forecastStatusRank(status) {
+  return status === "おすすめ" ? 0 : status === "まずまず" ? 1 : status === "慎重" ? 2 : 3;
+}
+
+function confidenceLabel(value) {
+  return value === "high" ? "高" : value === "medium" ? "中" : "低";
+}
+
+function formatForecastDate(date) {
+  const value = new Date(`${date}T00:00:00+09:00`);
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+  }).format(value);
 }
 
 function renderBoard(board) {
@@ -541,7 +627,11 @@ function initWorldChart() {
   });
 }
 
-elements.refresh.addEventListener("click", loadBoard);
+elements.refresh.addEventListener("click", () => {
+  loadBoard();
+  loadTomorrowBoard();
+});
 initLiveStreams();
 initWorldChart();
 loadBoard();
+loadTomorrowBoard();
