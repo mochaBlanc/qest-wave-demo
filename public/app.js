@@ -208,21 +208,52 @@ function renderSlots() {
 function slotCard(slot) {
   const tab = selectedTab();
   const ended = isPastSlot(slot);
+  const status = ended ? "終了" : text(slot.status);
+  const waterTemp = formatSlotWaterTemp(slot.water_temp_c);
+  const wetsuit = formatSlotWetsuit(slot);
+  const tide = formatSlotTide(slot);
   const article = document.createElement("article");
   article.className = `slot-card${ended ? " past" : ""}`;
   article.innerHTML = `
-    <header class="slot-header">
-      <div><h3 class="slot-title">${escapeHtml(slot.label)}</h3><p class="slot-time">${escapeHtml(slot.time_range)}</p></div>
-      <span class="status-chip">${escapeHtml(ended ? "終了" : slot.status)}</span>
-    </header>
-    <div class="slot-selected-score">
-      <span>${escapeHtml(metricGuideLabel(tab.label))}</span>
+    <header class="slot-detail-head">
+      <div>
+        <p>時間帯</p>
+        <h3>${escapeHtml(slot.label)}</h3>
+      </div>
       <strong>${plainStars(scoreForSlot(slot, tab.key))}</strong>
-    </div>
+    </header>
+    <dl class="slot-detail-list">
+      <div><dt>時間帯</dt><dd>${escapeHtml(slot.time_range)}</dd></div>
+      <div><dt>表示指数</dt><dd>${escapeHtml(tab.label)}</dd></div>
+      <div><dt>ステータス</dt><dd><span class="status-chip">${escapeHtml(status)}</span></dd></div>
+      ${waterTemp ? `<div><dt>水温</dt><dd>${escapeHtml(waterTemp)}</dd></div>` : ""}
+      ${wetsuit ? `<div><dt>ウェット</dt><dd>${escapeHtml(wetsuit)}</dd></div>` : ""}
+      ${tide ? `<div><dt>潮位目安</dt><dd>${escapeHtml(tide)}</dd></div>` : ""}
+    </dl>
     <p class="slot-message">${escapeHtml(slot.message)}</p>
+    ${slot.tide_note ? `<p class="slot-note">${escapeHtml(slot.tide_note)}</p>` : ""}
     ${slot.caution ? `<p class="caution">${escapeHtml(slot.caution)}</p>` : ""}
   `;
   return article;
+}
+
+function formatSlotWaterTemp(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const temperature = Number(value);
+  return Number.isFinite(temperature) && temperature > 0 ? `${temperature.toFixed(1)}℃` : "";
+}
+
+function formatSlotWetsuit(slot) {
+  const label = typeof slot?.wetsuit_label === "string" ? slot.wetsuit_label.trim() : "";
+  const thickness = typeof slot?.wetsuit_thickness === "string" ? slot.wetsuit_thickness.trim() : "";
+  return [label, thickness].filter(Boolean).join(" / ");
+}
+
+function formatSlotTide(slot) {
+  if (slot?.tide_height_m === null || slot?.tide_height_m === undefined || slot?.tide_height_m === "") return "";
+  const height = Number(slot.tide_height_m);
+  const trend = typeof slot?.tide_trend === "string" ? slot.tide_trend.trim() : "";
+  return Number.isFinite(height) && trend ? `${height.toFixed(2)}m / ${trend}` : "";
 }
 
 function expertRecommendation(board) {

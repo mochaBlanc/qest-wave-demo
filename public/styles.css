@@ -948,22 +948,30 @@ h2 {
   color: rgba(24, 49, 60, 0.58);
 }
 
-.slot-header {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: start;
+.slot-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.slot-title {
-  margin: 0;
-  font-size: 18px;
-}
-
-.slot-time {
-  margin: 2px 0 0;
+.slot-detail-head p {
+  margin: 0 0 2px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.slot-detail-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.slot-detail-head > strong {
+  color: var(--ocean);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .status-chip {
@@ -977,6 +985,43 @@ h2 {
 
 .home-tag-selector {
   margin-bottom: 10px;
+}
+
+.slot-detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.slot-detail-list div {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.slot-detail-list dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.slot-detail-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.slot-detail-list .status-chip {
+  display: inline-block;
+  padding: 2px 7px;
 }
 
 .slot-scores {
@@ -1034,6 +1079,16 @@ h2 {
   color: var(--navy);
   font-size: 13px;
   line-height: 1.65;
+}
+
+.slot-note {
+  margin: 8px 0 0;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: var(--ocean-soft);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .caution {
@@ -1674,6 +1729,10 @@ h2 {
 
   .slot-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .slot-detail-list {
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   }
 
   .live-check-card {
