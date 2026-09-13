@@ -224,7 +224,6 @@ function renderDetail() {
       ${hasTide(selected.slot) ? `<div><dt>潮位目安</dt><dd>${escapeHtml(formatTide(selected.slot))}</dd></div>` : ""}
     </dl>
     <p class="detail-message">${escapeHtml(selected.slot.message)}</p>
-    ${selected.slot.tide_note ? `<p class="tide-note">${escapeHtml(selected.slot.tide_note)}</p>` : ""}
     ${selected.slot.wetsuit_note ? `<p class="wetsuit-note">${escapeHtml(selected.slot.wetsuit_note)}</p>` : ""}
     ${selected.slot.caution ? `<p class="caution">${escapeHtml(selected.slot.caution)}</p>` : ""}
   `;
