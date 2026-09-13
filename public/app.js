@@ -662,10 +662,23 @@ function initWorldChart() {
   });
 }
 
+function arrangeHomepageSections() {
+  const details = document.querySelector("#details");
+  const sections = [
+    details?.querySelector(".trend-section"),
+    details?.querySelector(".live-check-card"),
+    details?.querySelector(".conditions-module"),
+    details?.querySelector(".notice"),
+    details?.querySelector(".world-chart-section"),
+  ].filter(Boolean);
+  if (details && sections.length === 5) details.append(...sections);
+}
+
 elements.refresh.addEventListener("click", () => {
   loadBoard();
   loadTomorrowBoard();
 });
+arrangeHomepageSections();
 initLiveStreams();
 initWorldChart();
 loadBoard();

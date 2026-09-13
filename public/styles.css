@@ -633,6 +633,30 @@ h1 {
   margin-top: 16px;
 }
 
+.conditions-module {
+  grid-column: 1 / -1;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 8px 22px rgba(65, 50, 32, 0.06);
+}
+
+.conditions-module {
+  display: grid;
+  gap: 14px;
+}
+
+.conditions-notes {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.conditions-module .local-note {
+  box-shadow: none;
+}
+
 .world-chart-section {
   grid-column: 1 / -1;
   padding: 13px;
@@ -883,14 +907,73 @@ h2 {
   gap: 12px;
 }
 
+.live-check-intro {
+  grid-column: 1 / -1;
+  margin: -3px 0 0 !important;
+  color: var(--muted) !important;
+  font-size: 12px !important;
+}
+
+.camera-map {
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow-x: auto;
+  border: 1px solid rgba(37, 111, 134, 0.18);
+  border-radius: 12px;
+  background: #dceff2;
+  scrollbar-width: thin;
+}
+
+.camera-map svg {
+  display: block;
+  width: 100%;
+  min-width: 620px;
+  height: auto;
+}
+
+.camera-map figcaption {
+  position: sticky;
+  left: 0;
+  width: fit-content;
+  padding: 5px 9px 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.map-sand { fill: #f5ead7; }
+.map-shore { fill: none; stroke: #b99565; stroke-width: 5; }
+.map-water-line { fill: none; stroke: rgba(37, 111, 134, 0.33); stroke-width: 3; }
+.map-river { fill: none; stroke: #76b4c3; stroke-width: 15; }
+.map-landmark { fill: #4e6269; font-size: 18px; font-weight: 700; }
+.map-direction { fill: #60767c; font-size: 15px; font-weight: 700; }
+.map-sea { fill: rgba(37, 111, 134, 0.72); font-size: 17px; font-weight: 800; letter-spacing: 0.12em; }
+.camera-pin circle { fill: var(--ocean); stroke: #fff; stroke-width: 4; }
+.camera-pin > text:not(.camera-label) { fill: #fff; font-size: 19px; font-weight: 900; text-anchor: middle; }
+.camera-pin path { fill: none; stroke: var(--ocean); stroke-width: 3; stroke-linecap: round; }
+.camera-pin .camera-label { fill: var(--navy); font-size: 15px; font-weight: 800; text-anchor: middle; }
+.camera-pin-3 circle { fill: #4d9577; }
+.camera-pin-3 path { stroke: #4d9577; }
+.camera-pin-4 circle { fill: #c88746; }
+.camera-pin-4 path { stroke: #c88746; }
+
+.live-check-card > .info-label {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .live-check-camera {
   display: grid;
+  align-content: start;
   gap: 7px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
 }
 
 .live-check-camera-secondary {
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  padding-top: 11px;
 }
 
 .live-check-name {
@@ -1428,6 +1511,20 @@ h2 {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .live-check-card {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .camera-map {
+    grid-column: 1 / -1;
+  }
+
+  .conditions-module {
+    grid-template-columns: minmax(0, 2fr) minmax(230px, 0.72fr);
+    align-items: start;
+  }
+
   .recommendations {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1466,22 +1563,22 @@ h2 {
 
 @media (min-width: 980px) {
   .details {
-    grid-template-columns: minmax(0, 1fr) 350px;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
   }
 
   .slots-section {
-    grid-column: 1;
-    grid-row: 3 / span 8;
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .trend-section {
     grid-column: 1 / -1;
-    grid-row: 1;
+    grid-row: auto;
   }
 
   .world-chart-section {
-    grid-row: 2;
+    grid-row: auto;
   }
 
   .notice {

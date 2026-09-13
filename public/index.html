@@ -110,28 +110,55 @@
           </div>
         </section>
 
-        <section class="slots-section" aria-labelledby="slots-title">
-          <div class="section-heading">
-            <p class="section-kicker">時間帯別</p>
-            <h2 id="slots-title" class="sr-only">コンディション</h2>
+        <section class="conditions-module" aria-labelledby="slots-title">
+          <div class="conditions-main">
+            <section class="slots-section">
+              <div class="section-heading">
+                <p class="section-kicker">時間帯別</p>
+                <h2 id="slots-title" class="sr-only">コンディション</h2>
+              </div>
+              <div id="home-tag-selector" class="tag-selector home-tag-selector" aria-label="表示指数切り替え"></div>
+              <div id="slot-grid" class="slot-grid"></div>
+            </section>
           </div>
-          <div id="home-tag-selector" class="tag-selector home-tag-selector" aria-label="表示指数切り替え"></div>
-          <div id="slot-grid" class="slot-grid"></div>
+
+          <div class="conditions-notes">
+            <aside class="local-note">
+              <p class="info-label">鵠沼ローカルメモ</p>
+              <p id="local-note"></p>
+            </aside>
+
+            <aside id="water-note-card" class="local-note water-note-card" hidden>
+              <p class="info-label">水温・ウェット目安</p>
+              <p id="water-note-summary"></p>
+              <p id="wetsuit-note-summary"></p>
+            </aside>
+          </div>
         </section>
-
-        <aside class="local-note">
-          <p class="info-label">鵠沼ローカルメモ</p>
-          <p id="local-note"></p>
-        </aside>
-
-        <aside id="water-note-card" class="local-note water-note-card" hidden>
-          <p class="info-label">水温・ウェット目安</p>
-          <p id="water-note-summary"></p>
-          <p id="wetsuit-note-summary"></p>
-        </aside>
 
         <aside class="local-note live-check-card">
           <p class="info-label">LIVE CHECK</p>
+          <p class="live-check-intro">位置を確認してから、見たいエリアの映像を選べます。</p>
+          <figure class="camera-map">
+            <svg viewBox="0 0 960 230" role="img" aria-labelledby="camera-map-title camera-map-desc">
+              <title id="camera-map-title">鵠沼海岸ライブカメラ位置関係</title>
+              <desc id="camera-map-desc">西側の引地川河口から、銅像前、新江ノ島水族館までの海岸線と、鵠沼7、3、4のカメラ位置を示す概略図です。</desc>
+              <path class="map-sand" d="M0 0H960V105C790 87 682 114 548 103C392 90 250 122 0 94Z" />
+              <path class="map-shore" d="M0 94C250 122 392 90 548 103C682 114 790 87 960 105" />
+              <path class="map-water-line" d="M0 145C205 169 391 133 555 150C715 166 822 128 960 145" />
+              <path class="map-river" d="M155 0C152 35 145 63 150 105" />
+              <text class="map-landmark" x="104" y="27">引地川</text>
+              <text class="map-landmark" x="506" y="52">銅像前</text>
+              <text class="map-landmark" x="745" y="34">新江ノ島水族館</text>
+              <text class="map-direction" x="24" y="210">← 辻堂方面</text>
+              <text class="map-direction" x="825" y="210">江の島方面 →</text>
+              <text class="map-sea" x="430" y="194">相模湾</text>
+              <g class="camera-pin" transform="translate(170 91)"><circle r="22" /><text x="0" y="6">⑦</text><path d="M0 23L0 48" /><text class="camera-label" x="0" y="66">引地川河口</text></g>
+              <g class="camera-pin camera-pin-3" transform="translate(650 96)"><circle r="22" /><text x="0" y="6">③</text><path d="M0 23L-25 49" /><text class="camera-label" x="-83" y="70">水族館前〜銅像前</text></g>
+              <g class="camera-pin camera-pin-4" transform="translate(756 89)"><circle r="22" /><text x="0" y="6">④</text><path d="M0 23L24 49" /><text class="camera-label" x="-42" y="70">別角度</text></g>
+            </svg>
+            <figcaption>位置関係の目安（正確な撮影範囲・方角とは異なる場合があります）</figcaption>
+          </figure>
           <div class="live-check-camera">
             <p class="live-check-name">鵠沼⑦ 引地川河口☆☆☆</p>
             <p class="live-check-provider">藤沢市鵠沼海岸・ライブ動画・<a href="https://namiaru.com/" target="_blank" rel="noopener noreferrer">なみある？提供</a></p>
