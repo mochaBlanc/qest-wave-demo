@@ -16,12 +16,6 @@ const elements = {
   advancedBest: document.querySelector("#advanced-best"),
   trendSection: document.querySelector("#trend-section"),
   trendGrid: document.querySelector("#trend-grid"),
-  tagSelector: document.querySelector("#home-tag-selector"),
-  slots: document.querySelector("#slot-grid"),
-  localNote: document.querySelector("#local-note"),
-  waterNoteCard: document.querySelector("#water-note-card"),
-  waterNoteSummary: document.querySelector("#water-note-summary"),
-  wetsuitNoteSummary: document.querySelector("#wetsuit-note-summary"),
   tomorrowBoard: document.querySelector("#tomorrow-board"),
   tomorrowMeta: document.querySelector("#tomorrow-meta"),
   tomorrowSummary: document.querySelector("#tomorrow-summary"),
@@ -30,24 +24,9 @@ const elements = {
   notice: document.querySelector("#notice"),
 };
 
-const metricTabGroups = [
-  [
-    { label: "レッスン", key: "lesson_index" },
-    { label: "初心者", key: "beginner_index" },
-  ],
-  [
-    { label: "ロング", key: "longboard_index" },
-    { label: "ミッドレングス", key: "midlength_index" },
-    { label: "ショート", key: "shortboard_index" },
-  ],
-];
-
-const metricTabs = metricTabGroups.flat();
-
 const state = {
   board: null,
   slots: [],
-  selectedMetric: "lesson_index",
 };
 
 const windyMaps = {
@@ -173,87 +152,8 @@ function renderBoard(board) {
   elements.advancedMessage.textContent = expert.message;
   elements.beginnerBest.textContent = availableBestTime(state.slots, "beginner_index", board.best_beginner_time);
   elements.advancedBest.textContent = availableBestTime(state.slots, "experienced_index", board.best_advanced_time);
-  elements.localNote.textContent = text(board.local_note);
-  renderWaterNote(board);
   elements.notice.textContent = text(board.notice);
-  renderTags();
   renderTrend(board.trend, state.slots);
-  renderSlots();
-}
-
-function renderTags() {
-  elements.tagSelector.replaceChildren(...metricTabGroups.map((group, groupIndex) => {
-    const row = document.createElement("div");
-    row.className = `tag-row ${groupIndex === 0 ? "tag-row-learning" : "tag-row-board"}`;
-    row.replaceChildren(...group.map((tab) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `tab-button${tab.key === state.selectedMetric ? " active" : ""}`;
-      button.textContent = tab.label;
-      button.addEventListener("click", () => {
-        state.selectedMetric = tab.key;
-        renderTags();
-        renderSlots();
-      });
-      return button;
-    }));
-    return row;
-  }));
-}
-
-function renderSlots() {
-  elements.slots.replaceChildren(...state.slots.map(slotCard));
-}
-
-function slotCard(slot) {
-  const tab = selectedTab();
-  const ended = isPastSlot(slot);
-  const status = ended ? "終了" : text(slot.status);
-  const waterTemp = formatSlotWaterTemp(slot.water_temp_c);
-  const wetsuit = formatSlotWetsuit(slot);
-  const tide = formatSlotTide(slot);
-  const article = document.createElement("article");
-  article.className = `slot-card${ended ? " past" : ""}`;
-  article.innerHTML = `
-    <header class="slot-detail-head">
-      <div>
-        <p>時間帯</p>
-        <h3>${escapeHtml(slot.label)}</h3>
-      </div>
-      <strong>${plainStars(scoreForSlot(slot, tab.key))}</strong>
-    </header>
-    <dl class="slot-detail-list">
-      <div><dt>時間帯</dt><dd>${escapeHtml(slot.time_range)}</dd></div>
-      <div><dt>表示指数</dt><dd>${escapeHtml(tab.label)}</dd></div>
-      <div><dt>ステータス</dt><dd><span class="status-chip">${escapeHtml(status)}</span></dd></div>
-      ${waterTemp ? `<div><dt>水温</dt><dd>${escapeHtml(waterTemp)}</dd></div>` : ""}
-      ${wetsuit ? `<div><dt>ウェット</dt><dd>${escapeHtml(wetsuit)}</dd></div>` : ""}
-      ${tide ? `<div><dt>潮位目安</dt><dd>${escapeHtml(tide)}</dd></div>` : ""}
-    </dl>
-    <p class="slot-message">${escapeHtml(slot.message)}</p>
-    ${slot.tide_note ? `<p class="slot-note">${escapeHtml(slot.tide_note)}</p>` : ""}
-    ${slot.caution ? `<p class="caution">${escapeHtml(slot.caution)}</p>` : ""}
-  `;
-  return article;
-}
-
-function formatSlotWaterTemp(value) {
-  if (value === null || value === undefined || value === "") return "";
-  const temperature = Number(value);
-  return Number.isFinite(temperature) && temperature > 0 ? `${temperature.toFixed(1)}℃` : "";
-}
-
-function formatSlotWetsuit(slot) {
-  const label = typeof slot?.wetsuit_label === "string" ? slot.wetsuit_label.trim() : "";
-  const thickness = typeof slot?.wetsuit_thickness === "string" ? slot.wetsuit_thickness.trim() : "";
-  return [label, thickness].filter(Boolean).join(" / ");
-}
-
-function formatSlotTide(slot) {
-  if (slot?.tide_height_m === null || slot?.tide_height_m === undefined || slot?.tide_height_m === "") return "";
-  const height = Number(slot.tide_height_m);
-  const trend = typeof slot?.tide_trend === "string" ? slot.tide_trend.trim() : "";
-  return Number.isFinite(height) && trend ? `${height.toFixed(2)}m / ${trend}` : "";
 }
 
 function expertRecommendation(board) {
@@ -273,16 +173,6 @@ function renderRecommendedTypes(types) {
     chip.textContent = type;
     return chip;
   }));
-}
-
-function renderWaterNote(board) {
-  const water = typeof board.water_temp_summary === "string" && board.water_temp_summary.trim() ? board.water_temp_summary : "";
-  const wetsuit = typeof board.wetsuit_summary === "string" && board.wetsuit_summary.trim() ? board.wetsuit_summary : "";
-  elements.waterNoteCard.hidden = !water && !wetsuit;
-  elements.waterNoteSummary.hidden = !water;
-  elements.wetsuitNoteSummary.hidden = !wetsuit;
-  elements.waterNoteSummary.textContent = water;
-  elements.wetsuitNoteSummary.textContent = wetsuit;
 }
 
 function availableBestTime(slots, key, fallback) {
@@ -519,10 +409,6 @@ function directionLabel(degrees) {
   return directions[index];
 }
 
-function selectedTab() {
-  return metricTabs.find((tab) => tab.key === state.selectedMetric) ?? metricTabs[0];
-}
-
 function scoreForSlot(slot, key) {
   const direct = Number(slot?.[key]);
   if (Number.isFinite(direct)) return scoreValue(direct);
@@ -537,10 +423,6 @@ function scoreForSlot(slot, key) {
 
 function conservativeShortboardScore(value) {
   return Math.max(1, Math.min(3, scoreValue(value) - 1));
-}
-
-function metricGuideLabel(label) {
-  return `${label}目安`;
 }
 
 function stars(value) {
@@ -698,12 +580,11 @@ function arrangeHomepageSections() {
   const sections = [
     details?.querySelector(".trend-section"),
     details?.querySelector(".live-check-card"),
-    details?.querySelector(".conditions-module"),
     details?.querySelector(".notice"),
     details?.querySelector(".world-chart-section"),
     details?.querySelector(".reference-links-section"),
   ].filter(Boolean);
-  if (details && sections.length === 6) details.append(...sections);
+  if (details && sections.length === 5) details.append(...sections);
 }
 
 elements.refresh.addEventListener("click", () => {

@@ -47,7 +47,6 @@ button { font: inherit; }
 }
 
 .forecast-board,
-.slot-card,
 .local-note,
 .tomorrow-board {
   border: 1px solid var(--line);
@@ -696,30 +695,6 @@ h1 {
   margin-top: 16px;
 }
 
-.conditions-module {
-  grid-column: 1 / -1;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--paper);
-  box-shadow: 0 8px 22px rgba(65, 50, 32, 0.06);
-}
-
-.conditions-module {
-  display: grid;
-  gap: 14px;
-}
-
-.conditions-notes {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-}
-
-.conditions-module .local-note {
-  box-shadow: none;
-}
-
 .world-chart-section {
   grid-column: 1 / -1;
   padding: 13px;
@@ -927,170 +902,6 @@ h2 {
   letter-spacing: -0.03em;
 }
 
-.slot-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.slot-card {
-  padding: 13px;
-  border-radius: 14px;
-}
-
-.slot-card.past {
-  background: #f1ede5;
-  color: rgba(24, 49, 60, 0.62);
-}
-
-.slot-card.past .slot-message,
-.slot-card.past .slot-time {
-  color: rgba(24, 49, 60, 0.58);
-}
-
-.slot-detail-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.slot-detail-head p {
-  margin: 0 0 2px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.slot-detail-head h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.slot-detail-head > strong {
-  color: var(--ocean);
-  font-size: 15px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.status-chip {
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: var(--ocean-soft);
-  color: var(--ocean);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.home-tag-selector {
-  margin-bottom: 10px;
-}
-
-.slot-detail-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin: 10px 0;
-}
-
-.slot-detail-list div {
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  min-width: 0;
-  padding: 8px 9px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-}
-
-.slot-detail-list dt {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.slot-detail-list dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.slot-detail-list .status-chip {
-  display: inline-block;
-  padding: 2px 7px;
-}
-
-.slot-scores {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 12px 0 10px;
-}
-
-.mini-score {
-  padding: 9px 10px;
-  border-radius: 10px;
-  background: #faf7f0;
-}
-
-.mini-score span {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.mini-score strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--ocean);
-  font-size: 13px;
-}
-
-.slot-selected-score {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 12px 0 10px;
-  padding: 9px 10px;
-  border-radius: 10px;
-  background: #faf7f0;
-}
-
-.slot-selected-score span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.slot-selected-score strong {
-  color: var(--ocean);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.slot-message {
-  margin: 0;
-  color: var(--navy);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.slot-note {
-  margin: 8px 0 0;
-  padding: 8px 9px;
-  border-radius: 10px;
-  background: var(--ocean-soft);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
 .caution {
   margin: 10px 0 0;
   padding: 9px 10px;
@@ -1117,11 +928,6 @@ h2 {
   color: var(--navy);
   font-size: 13px;
   line-height: 1.65;
-}
-
-.water-note-card {
-  display: grid;
-  gap: 7px;
 }
 
 .live-check-card {
@@ -1727,14 +1533,6 @@ h2 {
     grid-template-columns: 1fr 1fr;
   }
 
-  .slot-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .slot-detail-list {
-    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-  }
-
   .live-check-card {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: start;
@@ -1742,11 +1540,6 @@ h2 {
 
   .camera-map {
     grid-column: 1 / -1;
-  }
-
-  .conditions-module {
-    grid-template-columns: minmax(0, 2fr) minmax(230px, 0.72fr);
-    align-items: start;
   }
 
   .reference-links-grid {
@@ -1789,11 +1582,6 @@ h2 {
   .details {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
-  }
-
-  .slots-section {
-    grid-column: auto;
-    grid-row: auto;
   }
 
   .trend-section {
