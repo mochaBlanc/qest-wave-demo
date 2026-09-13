@@ -112,7 +112,7 @@ function renderDays() {
     button.innerHTML = `
       <span>${escapeHtml(shortDate(day.date))}</span>
       <strong>${escapeHtml(day.weekday)}</strong>
-      <span class="mode-label">${isToday(day) ? "今日 / 当日データ" : "予測"}</span>
+      <span class="mode-label">${isToday(day) ? "今日" : "予測"}</span>
       <em>${escapeHtml(day.confidence)}</em>
     `;
     button.addEventListener("click", () => {

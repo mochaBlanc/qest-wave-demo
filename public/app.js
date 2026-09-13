@@ -670,8 +670,9 @@ function arrangeHomepageSections() {
     details?.querySelector(".conditions-module"),
     details?.querySelector(".notice"),
     details?.querySelector(".world-chart-section"),
+    details?.querySelector(".reference-links-section"),
   ].filter(Boolean);
-  if (details && sections.length === 5) details.append(...sections);
+  if (details && sections.length === 6) details.append(...sections);
 }
 
 elements.refresh.addEventListener("click", () => {

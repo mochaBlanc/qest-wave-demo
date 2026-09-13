@@ -6,6 +6,7 @@
     <meta name="description" content="鵠沼海岸の時間帯別サーフィン指数を確認できるBIG WAVEデモ" />
     <title>鵠沼サーフィン指数</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script src="/i18n.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1" defer></script>
     <script src="/app.js" defer></script>
   </head>
@@ -19,6 +20,11 @@
             <p id="updated-at" class="updated-at">更新（JST）：—</p>
           </div>
           <div class="header-actions">
+            <div class="language-switcher" role="group" aria-label="表示言語">
+              <button type="button" data-language="ja">日本語</button>
+              <button type="button" data-language="en">EN</button>
+              <button type="button" data-language="zh">中文</button>
+            </div>
             <a class="board-link" href="/forecast">明日の予測を見る</a>
             <button id="refresh-button" class="refresh-button" type="button">更新</button>
           </div>
@@ -58,19 +64,21 @@
         </div>
       </section>
 
-      <section id="tomorrow-board" class="tomorrow-board" aria-labelledby="tomorrow-title" hidden>
+      <section id="tomorrow-board" class="tomorrow-board" aria-label="NEXT DAY" hidden>
         <div class="tomorrow-head">
           <div>
             <p class="section-kicker">NEXT DAY</p>
-            <h2 id="tomorrow-title">明日の予測</h2>
             <p id="tomorrow-meta" class="tomorrow-meta"></p>
           </div>
-          <a class="board-link" href="/forecast">スポット別に見る</a>
+          <a class="board-link tomorrow-detail-link" href="/forecast">詳細</a>
         </div>
         <p id="tomorrow-summary" class="tomorrow-summary"></p>
         <div id="tomorrow-candidates" class="tomorrow-candidates"></div>
         <div id="tomorrow-slots" class="tomorrow-slots" aria-label="鵠沼メインの明日時間帯別予測"></div>
-        <p class="tomorrow-source">波浪 Best Match + JMA近程気象。前日夜と当日朝に再確認してください。</p>
+        <p class="tomorrow-source">
+          波浪 Best Match + JMA近程気象。前日夜と当日朝に再確認してください。
+          <span class="prediction-credit">予測機能 Powered by Dify</span>
+        </p>
       </section>
 
       <div id="details" class="details" hidden>
@@ -82,18 +90,16 @@
           <div id="trend-grid" class="trend-grid"></div>
         </section>
 
-        <section class="world-chart-section" aria-labelledby="world-chart-title">
+        <section class="world-chart-section" aria-label="GLOBAL CHART">
           <div class="world-chart-head">
             <div>
               <p class="section-kicker">GLOBAL CHART</p>
-              <h2 id="world-chart-title">波・風 チャート</h2>
             </div>
             <div class="world-chart-tabs" role="group" aria-label="表示レイヤー">
               <button class="world-chart-tab active" type="button" data-windy-overlay="waves" aria-pressed="true">波高</button>
               <button class="world-chart-tab" type="button" data-windy-overlay="wind" aria-pressed="false">風</button>
             </div>
           </div>
-          <p class="world-chart-description">鵠沼メイン周辺の波と風の動きを確認できます。</p>
           <div class="world-chart-frame">
             <iframe
               id="windy-world-chart"
@@ -107,6 +113,30 @@
           <div class="world-chart-foot">
             <span>Windy.com 提供</span>
             <a href="https://www.windy.com/-Waves-waves?waves,35.317,139.472,12" target="_blank" rel="noopener noreferrer">Windyで全画面表示</a>
+          </div>
+        </section>
+
+        <section class="reference-links-section" aria-labelledby="reference-links-title">
+          <div class="reference-links-head">
+            <p class="section-kicker">MORE SURF INFO</p>
+            <h2 id="reference-links-title" class="sr-only">外部の波情報を見る</h2>
+          </div>
+          <div class="reference-links-grid">
+            <a class="reference-link reference-link-surfline" href="https://www.surfline.com/surf-report/kugenuma-beach-shonan/5842041f4e65fad6a7708d94" target="_blank" rel="noopener noreferrer external">
+              <span class="reference-mark" aria-hidden="true">SL</span>
+              <span class="reference-copy"><strong>SURFLINE</strong><small>Kugenuma Beach Report</small></span>
+              <span class="reference-arrow" aria-hidden="true">↗</span>
+            </a>
+            <a class="reference-link reference-link-forecast" href="https://www.surf-forecast.com/breaks/Kugenuma/forecasts/latest/six_day" target="_blank" rel="noopener noreferrer external">
+              <span class="reference-mark" aria-hidden="true">SF</span>
+              <span class="reference-copy"><strong>Surf-Forecast</strong><small>Kugenuma Rivermouth</small></span>
+              <span class="reference-arrow" aria-hidden="true">↗</span>
+            </a>
+            <a class="reference-link reference-link-ocean" href="https://www.surfers-ocean.com/%E3%82%B5%E3%83%BC%E3%83%95%E3%82%A3%E3%83%B3%E6%B3%A2%E6%83%85%E5%A0%B1/%E9%B5%A0%E6%B2%BC%E6%B5%B7%E5%B2%B8/" target="_blank" rel="noopener noreferrer external">
+              <span class="reference-mark" aria-hidden="true">SO</span>
+              <span class="reference-copy"><strong>Surfers’ Ocean</strong><small>鵠沼の波情報・ライブカメラ</small></span>
+              <span class="reference-arrow" aria-hidden="true">↗</span>
+            </a>
           </div>
         </section>
 
@@ -138,7 +168,6 @@
 
         <aside class="local-note live-check-card">
           <p class="info-label">LIVE CHECK</p>
-          <p class="live-check-intro">位置を確認してから、見たいエリアの映像を選べます。</p>
           <figure class="camera-map">
             <svg viewBox="0 0 960 230" role="img" aria-labelledby="camera-map-title camera-map-desc">
               <title id="camera-map-title">鵠沼海岸ライブカメラ位置関係</title>
@@ -199,6 +228,7 @@
                 referrerpolicy="strict-origin-when-cross-origin"
               ></iframe>
             </div>
+            <p class="live-check-status">再生ボタンを押して映像を確認</p>
             <a
               class="live-check-button"
               href="https://www.youtube.com/live/DZWA9Xicaxg?si=5cTp2UpcmJWBxMDa"
