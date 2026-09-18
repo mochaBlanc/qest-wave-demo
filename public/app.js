@@ -2,7 +2,6 @@ const elements = {
   status: document.querySelector("#status"),
   content: document.querySelector("#content"),
   details: document.querySelector("#details"),
-  refresh: document.querySelector("#refresh-button"),
   brand: document.querySelector("#brand-label"),
   title: document.querySelector("#board-title"),
   updated: document.querySelector("#updated-at"),
@@ -35,7 +34,6 @@ const windyMaps = {
 };
 
 async function loadBoard() {
-  elements.refresh.disabled = true;
   elements.status.hidden = false;
   elements.status.classList.remove("error");
   elements.status.textContent = "海況データを読み込んでいます…";
@@ -51,8 +49,6 @@ async function loadBoard() {
     console.error("Failed to load today's board", error);
     elements.status.classList.add("error");
     elements.status.textContent = "データを読み込めませんでした。時間をおいてもう一度お試しください。";
-  } finally {
-    elements.refresh.disabled = false;
   }
 }
 
@@ -587,10 +583,6 @@ function arrangeHomepageSections() {
   if (details && sections.length === 5) details.append(...sections);
 }
 
-elements.refresh.addEventListener("click", () => {
-  loadBoard();
-  loadTomorrowBoard();
-});
 arrangeHomepageSections();
 initLiveStreams();
 initWorldChart();

@@ -279,23 +279,6 @@ h1 {
   font-size: 12px;
 }
 
-.refresh-button {
-  min-width: 62px;
-  padding: 8px 11px;
-  border: 1px solid var(--blue-line);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--ocean);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.refresh-button:disabled {
-  cursor: wait;
-  opacity: 0.55;
-}
-
 .wave-divider {
   height: 8px;
   margin: 16px 0;
