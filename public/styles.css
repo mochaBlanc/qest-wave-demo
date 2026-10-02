@@ -957,8 +957,8 @@ h2 {
 .camera-pin .camera-label { fill: var(--navy); font-size: 15px; font-weight: 800; text-anchor: middle; }
 .camera-pin-3 circle { fill: #4d9577; }
 .camera-pin-3 path { stroke: #4d9577; }
-.camera-pin-4 circle { fill: #c88746; }
-.camera-pin-4 path { stroke: #c88746; }
+.camera-pin-koshigoe circle { fill: #c88746; }
+.camera-pin-koshigoe path { stroke: #c88746; }
 
 .live-check-card > .info-label {
   grid-column: 1 / -1;
