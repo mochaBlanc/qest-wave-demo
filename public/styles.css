@@ -681,8 +681,6 @@ h1 {
 .world-chart-section {
   grid-column: 1 / -1;
   width: 100%;
-  max-width: 740px;
-  margin-inline: auto;
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -804,6 +802,14 @@ h1 {
 .reference-link-ocean::before,
 .reference-link-ocean .reference-mark {
   background: #b77a3d;
+}
+
+.world-chart-head,
+.world-chart-frame,
+.world-chart-foot {
+  width: 100%;
+  max-width: 712px;
+  margin-inline: auto;
 }
 
 .world-chart-head,
