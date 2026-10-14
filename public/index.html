@@ -92,25 +92,32 @@
           <div class="world-chart-head">
             <div>
               <p class="section-kicker">GLOBAL CHART</p>
+              <p class="world-chart-location">藤沢・鵠沼</p>
             </div>
             <div class="world-chart-tabs" role="group" aria-label="表示レイヤー">
               <button class="world-chart-tab active" type="button" data-windy-overlay="waves" aria-pressed="true">波高</button>
               <button class="world-chart-tab" type="button" data-windy-overlay="wind" aria-pressed="false">風</button>
             </div>
           </div>
-          <div class="world-chart-frame">
+          <div class="world-chart-frame is-locked">
             <iframe
               id="windy-world-chart"
-              src="https://embed.windy.com/embed.html?type=map&amp;location=coordinates&amp;metricRain=mm&amp;metricTemp=%C2%B0C&amp;metricWind=m%2Fs&amp;zoom=12&amp;overlay=waves&amp;product=ecmwfWaves&amp;level=surface&amp;lat=35.317&amp;lon=139.472&amp;marker=true&amp;message=true"
+              src="https://embed.windy.com/embed.html?type=map&amp;location=coordinates&amp;metricRain=mm&amp;metricTemp=%C2%B0C&amp;metricWind=m%2Fs&amp;zoom=11&amp;overlay=waves&amp;product=ecmwfWaves&amp;level=surface&amp;lat=35.310&amp;lon=139.480&amp;marker=true&amp;message=true"
               title="Windy 鵠沼メイン 波・風チャート"
+              tabindex="-1"
               loading="lazy"
               allowfullscreen
               referrerpolicy="strict-origin-when-cross-origin"
             ></iframe>
+            <span class="world-chart-marker">鵠沼海岸</span>
+          </div>
+          <div class="world-chart-controls">
+            <button id="windy-interaction" class="world-chart-control" type="button" aria-pressed="false" aria-controls="windy-world-chart">地図を操作</button>
+            <button id="windy-reset" class="world-chart-control" type="button" aria-controls="windy-world-chart">鵠沼へ戻る</button>
           </div>
           <div class="world-chart-foot">
             <span>Windy.com 提供</span>
-            <a href="https://www.windy.com/-Waves-waves?waves,35.317,139.472,12" target="_blank" rel="noopener noreferrer">Windyで全画面表示</a>
+            <a id="windy-fullscreen" href="https://www.windy.com/-Waves-waves?waves,35.310,139.480,11" target="_blank" rel="noopener noreferrer">Windyで全画面表示</a>
           </div>
         </section>
 

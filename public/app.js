@@ -29,8 +29,8 @@ const state = {
 };
 
 const windyMaps = {
-  waves: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=12&overlay=waves&product=ecmwfWaves&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
-  wind: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=12&overlay=wind&product=ecmwf&level=surface&lat=35.317&lon=139.472&marker=true&message=true",
+  waves: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=11&overlay=waves&product=ecmwfWaves&level=surface&lat=35.310&lon=139.480&marker=true&message=true",
+  wind: "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&zoom=11&overlay=wind&product=ecmwf&level=surface&lat=35.310&lon=139.480&marker=true&message=true",
 };
 
 async function loadBoard() {
@@ -557,11 +557,40 @@ function initWorldChart() {
   const frame = document.querySelector("#windy-world-chart");
   const tabs = [...document.querySelectorAll("[data-windy-overlay]")];
   if (!frame || !tabs.length) return;
+  const container = frame.parentElement;
+  const interaction = document.querySelector("#windy-interaction");
+  const reset = document.querySelector("#windy-reset");
+  const fullscreen = document.querySelector("#windy-fullscreen");
+  let selectedOverlay = "waves";
+  let interactive = false;
+
+  function setInteractive(next) {
+    interactive = next;
+    container.classList.toggle("is-locked", !next);
+    frame.setAttribute("tabindex", next ? "0" : "-1");
+    interaction?.setAttribute("aria-pressed", String(next));
+    if (interaction) {
+      interaction.textContent = next ? "地図を固定" : "地図を操作";
+    }
+  }
+
+  function recenter() {
+    frame.src = windyMaps[selectedOverlay];
+    setInteractive(false);
+    if (fullscreen) fullscreen.href = `https://www.windy.com/-${selectedOverlay === "waves" ? "Waves-waves" : "Wind-wind"}?${selectedOverlay},35.310,139.480,11`;
+  }
+
+  interaction?.addEventListener("click", () => {
+    if (interactive) recenter();
+    else setInteractive(true);
+  });
+  reset?.addEventListener("click", recenter);
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       const overlay = tab.dataset.windyOverlay;
       if (!windyMaps[overlay] || tab.classList.contains("active")) return;
-      frame.src = windyMaps[overlay];
+      selectedOverlay = overlay;
+      recenter();
       tabs.forEach((item) => {
         const active = item === tab;
         item.classList.toggle("active", active);

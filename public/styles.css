@@ -680,6 +680,9 @@ h1 {
 
 .world-chart-section {
   grid-column: 1 / -1;
+  width: 100%;
+  max-width: 740px;
+  margin-inline: auto;
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -838,10 +841,9 @@ h1 {
 }
 
 .world-chart-frame {
+  position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  min-height: 360px;
-  max-height: 620px;
+  height: 320px;
   overflow: hidden;
   border: 1px solid rgba(24, 49, 60, 0.12);
   border-radius: 12px;
@@ -853,6 +855,72 @@ h1 {
   width: 100%;
   height: 100%;
   border: 0;
+}
+
+.world-chart-frame.is-locked iframe {
+  pointer-events: none;
+}
+
+.world-chart-location {
+  margin: 2px 0 8px;
+  color: var(--ocean);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.world-chart-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -100%);
+  padding: 4px 8px;
+  border: 1px solid #fff;
+  border-radius: 5px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.world-chart-marker::after {
+  position: absolute;
+  top: 100%;
+  left: calc(50% - 4px);
+  border: 4px solid transparent;
+  border-top-color: var(--navy);
+  content: "";
+}
+
+.world-chart-frame:not(.is-locked) .world-chart-marker {
+  display: none;
+}
+
+.world-chart-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.world-chart-control {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ocean);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.world-chart-control[aria-pressed="true"] {
+  background: var(--ocean);
+  color: #fff;
+}
+
+.world-chart-control:focus-visible {
+  outline: 2px solid var(--ocean);
+  outline-offset: 2px;
 }
 
 .world-chart-foot {
@@ -1549,8 +1617,7 @@ h2 {
   }
 
   .world-chart-frame {
-    aspect-ratio: 4 / 3;
-    min-height: 390px;
+    height: 260px;
   }
 }
 
