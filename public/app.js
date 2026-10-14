@@ -20,7 +20,6 @@ const elements = {
   tomorrowSummary: document.querySelector("#tomorrow-summary"),
   tomorrowCandidates: document.querySelector("#tomorrow-candidates"),
   tomorrowSlots: document.querySelector("#tomorrow-slots"),
-  notice: document.querySelector("#notice"),
 };
 
 const state = {
@@ -148,7 +147,6 @@ function renderBoard(board) {
   elements.advancedMessage.textContent = expert.message;
   elements.beginnerBest.textContent = availableBestTime(state.slots, "beginner_index", board.best_beginner_time);
   elements.advancedBest.textContent = availableBestTime(state.slots, "experienced_index", board.best_advanced_time);
-  elements.notice.textContent = text(board.notice);
   renderTrend(board.trend, state.slots);
 }
 
@@ -578,11 +576,10 @@ function arrangeHomepageSections() {
   const sections = [
     details?.querySelector(".trend-section"),
     details?.querySelector(".live-check-card"),
-    details?.querySelector(".notice"),
     details?.querySelector(".world-chart-section"),
     details?.querySelector(".reference-links-section"),
   ].filter(Boolean);
-  if (details && sections.length === 5) details.append(...sections);
+  if (details && sections.length === 4) details.append(...sections);
 }
 
 arrangeHomepageSections();
