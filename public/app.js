@@ -71,7 +71,12 @@ async function loadTomorrowBoard() {
     elements.tomorrowSummary.textContent = text(tomorrow.summary);
     elements.tomorrowCandidates.replaceChildren(...candidates.map(tomorrowCandidateCard));
     elements.tomorrowSlots.replaceChildren(...(Array.isArray(kugenuma?.slots) ? kugenuma.slots : []).map(tomorrowSlotChip));
+    window.BIG_WAVE_FORECAST.render(forecast, tomorrow.date);
     elements.tomorrowBoard.hidden = false;
+    if (location.hash === "#tomorrow-board") {
+      document.querySelector("#tomorrow-details").open = true;
+      requestAnimationFrame(() => elements.tomorrowBoard.scrollIntoView({ block: "start" }));
+    }
   } catch (error) {
     console.error("Failed to load tomorrow forecast", error);
   }
@@ -583,6 +588,9 @@ function arrangeHomepageSections() {
 }
 
 arrangeHomepageSections();
+document.querySelector("#tomorrow-details").addEventListener("toggle", (event) => {
+  document.querySelector("#tomorrow-overview").hidden = event.currentTarget.open;
+});
 initLiveStreams();
 initWorldChart();
 loadBoard();

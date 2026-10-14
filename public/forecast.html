@@ -3,72 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="BIG WAVE 鵠沼・明日のサーフィン予測" />
-    <title>鵠沼・明日のサーフィン予測</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <script src="/i18n.js" defer></script>
-    <script src="/forecast.js" defer></script>
+    <meta http-equiv="refresh" content="0;url=/#tomorrow-board" />
+    <link rel="canonical" href="/" />
+    <title>BIG WAVE</title>
+    <script>location.replace("/#tomorrow-board");</script>
   </head>
-  <body>
-    <main class="page-shell">
-      <section class="forecast-board forecast-page" aria-labelledby="forecast-title">
-        <header class="board-header">
-          <div class="title-group">
-            <p id="forecast-brand" class="brand">BIG WAVE</p>
-            <h1 id="forecast-title">鵠沼・明日のサーフィン予測</h1>
-            <p id="forecast-meta" class="updated-at">更新（JST）：—</p>
-            <p id="forecast-area" class="forecast-area">鵠沼・江の島・鎌倉側</p>
-          </div>
-          <div class="header-actions">
-            <div class="language-switcher" role="group" aria-label="表示言語">
-              <button type="button" data-language="ja">日本語</button>
-              <button type="button" data-language="en">EN</button>
-              <button type="button" data-language="zh">中文</button>
-            </div>
-            <a class="board-link" href="/">今日の指数へ戻る</a>
-          </div>
-        </header>
-
-        <div class="wave-divider" aria-hidden="true"></div>
-
-        <p id="today-ended-note" class="forecast-note ended-note" hidden>今日の時間帯はすでに終了しています。明日以降の予測を参考にしてください。</p>
-
-        <div id="forecast-status" class="status" role="status">近程予測を読み込んでいます…</div>
-
-        <div id="forecast-content" class="forecast-content" hidden>
-          <section aria-label="指数切り替え">
-            <div id="tag-selector" class="tag-selector"></div>
-          </section>
-
-          <section aria-label="日付切り替え">
-            <div id="day-selector" class="day-selector"></div>
-          </section>
-
-          <section class="recommendation-box" aria-labelledby="recommendation-title">
-            <div class="section-heading compact-heading">
-              <h2 id="recommendation-title">候補</h2>
-            </div>
-            <div id="recommendations" class="recommendations"></div>
-          </section>
-
-          <section aria-labelledby="heatmap-title">
-            <div class="section-heading compact-heading">
-              <h2 id="heatmap-title">ヒートマップ</h2>
-            </div>
-            <div id="heatmap" class="heatmap"></div>
-          </section>
-
-          <section class="detail-panel" aria-labelledby="detail-title">
-            <h2 id="detail-title">詳細</h2>
-            <div id="detail-content"></div>
-          </section>
-
-          <footer class="notice">
-            <p id="forecast-notice"></p>
-            <p class="prediction-credit">予測機能 Powered by Dify</p>
-          </footer>
-        </div>
-      </section>
-    </main>
-  </body>
+  <body><a href="/#tomorrow-board">BIG WAVE / NEXT DAY</a></body>
 </html>

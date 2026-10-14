@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/styles.css" />
     <script src="/i18n.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1" defer></script>
+    <script src="/forecast.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -68,14 +69,35 @@
             <p class="section-kicker">NEXT DAY</p>
             <p id="tomorrow-meta" class="tomorrow-meta"></p>
           </div>
-          <a class="board-link tomorrow-detail-link" href="/forecast">明日の予測を見る</a>
         </div>
         <p id="tomorrow-summary" class="tomorrow-summary"></p>
-        <div id="tomorrow-candidates" class="tomorrow-candidates"></div>
-        <div id="tomorrow-slots" class="tomorrow-slots" aria-label="鵠沼メインの明日時間帯別予測"></div>
+        <div id="tomorrow-overview" class="tomorrow-overview">
+          <div id="tomorrow-candidates" class="tomorrow-candidates"></div>
+          <div id="tomorrow-slots" class="tomorrow-slots" aria-label="鵠沼メインの明日時間帯別予測"></div>
+        </div>
+        <details id="tomorrow-details" class="tomorrow-details">
+          <summary>スポット・時間帯を詳しく見る</summary>
+          <div id="forecast-status" class="status" role="status">近程予測を読み込んでいます…</div>
+          <div id="forecast-content" class="forecast-content" hidden>
+            <section aria-label="指数切り替え">
+              <div id="tag-selector" class="tag-selector"></div>
+            </section>
+            <section class="recommendation-box" aria-labelledby="recommendation-title">
+              <div class="section-heading compact-heading"><h2 id="recommendation-title">候補</h2></div>
+              <div id="recommendations" class="recommendations"></div>
+            </section>
+            <section aria-labelledby="heatmap-title">
+              <div class="section-heading compact-heading"><h2 id="heatmap-title">ヒートマップ</h2></div>
+              <div id="heatmap" class="heatmap"></div>
+            </section>
+            <section class="detail-panel" aria-labelledby="detail-title">
+              <h2 id="detail-title">詳細</h2>
+              <div id="detail-content"></div>
+            </section>
+          </div>
+        </details>
         <p class="tomorrow-source">
           波浪 Best Match + JMA近程気象。前日夜と当日朝に再確認してください。
-          <span class="prediction-credit">予測機能 Powered by Dify</span>
         </p>
       </section>
 

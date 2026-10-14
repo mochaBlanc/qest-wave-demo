@@ -1,3 +1,4 @@
+(() => {
 const metricTabGroups = [
   [
     { label: "レッスン", key: "lesson_index" },
@@ -15,18 +16,11 @@ const metricTabs = metricTabGroups.flat();
 const forecastElements = {
   status: document.querySelector("#forecast-status"),
   content: document.querySelector("#forecast-content"),
-  brand: document.querySelector("#forecast-brand"),
-  title: document.querySelector("#forecast-title"),
-  meta: document.querySelector("#forecast-meta"),
-  area: document.querySelector("#forecast-area"),
-  todayEndedNote: document.querySelector("#today-ended-note"),
   tags: document.querySelector("#tag-selector"),
-  days: document.querySelector("#day-selector"),
   recommendationTitle: document.querySelector("#recommendation-title"),
   recommendations: document.querySelector("#recommendations"),
   heatmap: document.querySelector("#heatmap"),
   detail: document.querySelector("#detail-content"),
-  notice: document.querySelector("#forecast-notice"),
 };
 
 const forecastState = {
@@ -36,19 +30,19 @@ const forecastState = {
   selected: null,
 };
 
-async function loadForecast() {
+function showForecast(board, date) {
   forecastElements.status.hidden = false;
   forecastElements.status.classList.remove("error");
   forecastElements.status.textContent = "近程予測を読み込んでいます…";
 
   try {
-    const response = await fetch("/api/forecast", { headers: { Accept: "application/json" }, cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    forecastState.board = await response.json();
+    forecastState.board = board;
     forecastState.metric = metricTabs.some((tab) => tab.key === forecastState.board.default_metric)
       ? forecastState.board.default_metric
       : "lesson_index";
-    forecastState.dayIndex = defaultDayIndex();
+    forecastState.dayIndex = (Array.isArray(board.days) ? board.days : []).findIndex((day) => day.date === date);
+    if (forecastState.dayIndex < 0) throw new Error("Selected forecast day unavailable");
+    forecastState.selected = null;
     renderForecast();
     forecastElements.status.hidden = true;
     forecastElements.content.hidden = false;
@@ -60,23 +54,15 @@ async function loadForecast() {
 }
 
 function renderForecast() {
-  const board = forecastState.board;
   const day = selectedDay();
-  forecastElements.brand.textContent = text(board.brand);
-  forecastElements.title.textContent = "鵠沼・明日のサーフィン予測";
-  forecastElements.meta.textContent = `更新（JST）：${text(board.updated_at)}`;
-  forecastElements.area.textContent = text(board.area);
-  forecastElements.notice.textContent = text(board.notice);
-  forecastElements.todayEndedNote.hidden = !isTodayFullyEnded();
 
   renderTags();
-  renderDays();
   renderRecommendations();
-  renderHeatmap();
 
   if (!forecastState.selected) {
     forecastState.selected = firstRecommendation() || firstCell(day);
   }
+  renderHeatmap();
   renderDetail();
 }
 
@@ -100,30 +86,6 @@ function renderTags() {
       return button;
     }));
     return row;
-  }));
-}
-
-function renderDays() {
-  const days = Array.isArray(forecastState.board.days) ? forecastState.board.days : [];
-  forecastElements.days.replaceChildren(...days.map((day, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `day-button${index === forecastState.dayIndex ? " active" : ""}${isToday(day) ? " today" : ""}`;
-    button.innerHTML = `
-      <span>${escapeHtml(shortDate(day.date))}</span>
-      <strong>${escapeHtml(day.weekday)}</strong>
-      <span class="mode-label">${isToday(day) ? "今日" : "予測"}</span>
-      <em>${escapeHtml(day.confidence)}</em>
-    `;
-    button.addEventListener("click", () => {
-      forecastState.dayIndex = index;
-      forecastState.selected = firstRecommendation() || firstCell(selectedDay());
-      renderDays();
-      renderRecommendations();
-      renderHeatmap();
-      renderDetail();
-    });
-    return button;
   }));
 }
 
@@ -287,25 +249,6 @@ function slotRank(label) {
   return ["早朝", "午前", "午後", "夕方"].indexOf(label);
 }
 
-function defaultDayIndex() {
-  const days = Array.isArray(forecastState.board?.days) ? forecastState.board.days : [];
-  if (!days.length) return 0;
-  const firstDay = days[0];
-  if (isToday(firstDay) && allSlotsEnded(firstDay) && days.length > 1) return 1;
-  return 0;
-}
-
-function isTodayFullyEnded() {
-  const days = Array.isArray(forecastState.board?.days) ? forecastState.board.days : [];
-  const today = days.find((day) => isToday(day));
-  return today ? allSlotsEnded(today) : false;
-}
-
-function allSlotsEnded(day) {
-  const slots = (Array.isArray(day?.spots) ? day.spots : []).flatMap((spot) => Array.isArray(spot.slots) ? spot.slots : []);
-  return slots.length > 0 && slots.every((slot) => isPastSlot(day, slot));
-}
-
 function isPastSlot(day, slot) {
   return isToday(day) && currentJstMinutes() >= slotEndMinutes(slot?.time_range);
 }
@@ -349,12 +292,14 @@ function stars(value) {
 }
 
 function formatWaterTemp(value) {
+  if (value === null || value === undefined || value === "") return "—";
   const numeric = Number(value);
   return Number.isFinite(numeric) ? `${numeric.toFixed(1)}℃` : "—";
 }
 
 function hasTide(slot) {
-  return Number.isFinite(Number(slot?.tide_height_m)) && typeof slot?.tide_trend === "string" && slot.tide_trend.trim() !== "";
+  return slot?.tide_height_m !== null && slot?.tide_height_m !== undefined
+    && Number.isFinite(Number(slot.tide_height_m)) && typeof slot.tide_trend === "string" && slot.tide_trend.trim() !== "";
 }
 
 function formatTide(slot) {
@@ -364,10 +309,6 @@ function formatTide(slot) {
 
 function isSelected(spot, slot) {
   return forecastState.selected?.spot?.spot_id === spot.spot_id && forecastState.selected?.slot === slot;
-}
-
-function shortDate(date) {
-  return typeof date === "string" && date.length >= 10 ? `${date.slice(5, 7)}/${date.slice(8, 10)}` : "—";
 }
 
 function text(value) {
@@ -384,4 +325,5 @@ function escapeHtml(value) {
   })[character]);
 }
 
-loadForecast();
+window.BIG_WAVE_FORECAST = { render: showForecast };
+})();
